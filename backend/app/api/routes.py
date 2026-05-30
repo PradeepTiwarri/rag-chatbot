@@ -5,6 +5,7 @@ from typing import List, Optional, Dict, Any
 import asyncio
 import json
 
+from ..config import config
 from ..tools import store_video_metadata
 from ..ingestion.video_extractor import VideoExtractor, InstagramExtractor
 from ..ingestion.transcript_fetcher import TranscriptFetcher
@@ -16,7 +17,6 @@ router = APIRouter()
 
 # Session storage
 session_memory: Dict[str, List[Dict]] = {}
-# Cache for agent instance
 _rag_agent = None
 
 def get_agent():
@@ -47,7 +47,6 @@ async def chat_stream(request: ChatRequest):
             if request.session_id not in session_memory:
                 session_memory[request.session_id] = []
             
-            # Get agent lazily
             agent = get_agent()
             
             result = agent.invoke(
@@ -74,7 +73,7 @@ async def chat_stream(request: ChatRequest):
                     'type': 'token',
                     'data': char
                 }) + '\n'
-                await asyncio.sleep(0.005)  # Faster streaming
+                await asyncio.sleep(0.005)
             
             session_memory[request.session_id].append({
                 'question': request.question,
@@ -100,10 +99,15 @@ async def ingest_videos(request: IngestRequest):
     
     results = {}
     
-    # Process YouTube (Video A)
+    # Process YouTube (Video A) - WITH YouTube API fallback
     try:
-        youtube_extractor = VideoExtractor()
+        # Initialize with YouTube API key for fallback
+        youtube_extractor = VideoExtractor(youtube_api_key=config.YOUTUBE_DATA_API_KEY)
         youtube_metadata = youtube_extractor.extract_metadata(request.youtube_url, "youtube")
+        
+        # Enrich with API follower count if needed
+        youtube_metadata = youtube_extractor.enrich_with_api_follower_count(youtube_metadata)
+        
         youtube_metadata['video_id'] = request.video_id_a
         
         transcript_fetcher = TranscriptFetcher()
@@ -125,7 +129,13 @@ async def ingest_videos(request: IngestRequest):
         
         results[request.video_id_a] = {
             'status': 'success',
-            'metadata': youtube_metadata,
+            'metadata': {
+                'creator': youtube_metadata['creator'],
+                'follower_count': youtube_metadata['follower_count'],
+                'views': youtube_metadata['views'],
+                'likes': youtube_metadata['likes'],
+                'engagement_rate': youtube_metadata['engagement_rate']
+            },
             'chunk_counts': {
                 'fine': len(chunks['fine']),
                 'medium': len(chunks['medium']),
@@ -136,7 +146,7 @@ async def ingest_videos(request: IngestRequest):
     except Exception as e:
         results[request.video_id_a] = {'status': 'error', 'error': str(e)}
     
-    # Process Instagram (Video B)
+    # Process Instagram (Video B) - No YouTube API needed
     try:
         instagram_extractor = InstagramExtractor()
         instagram_metadata = instagram_extractor.extract_metadata(request.instagram_url, "instagram")
@@ -161,7 +171,13 @@ async def ingest_videos(request: IngestRequest):
         
         results[request.video_id_b] = {
             'status': 'success',
-            'metadata': instagram_metadata,
+            'metadata': {
+                'creator': instagram_metadata['creator'],
+                'follower_count': instagram_metadata['follower_count'],
+                'views': instagram_metadata['views'],
+                'likes': instagram_metadata['likes'],
+                'engagement_rate': instagram_metadata['engagement_rate']
+            },
             'chunk_counts': {
                 'fine': len(chunks['fine']),
                 'medium': len(chunks['medium']),

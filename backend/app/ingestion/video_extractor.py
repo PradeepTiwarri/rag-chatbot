@@ -5,12 +5,13 @@ from typing import Dict, Any, Optional
 class VideoExtractor:
     """Extract metadata from YouTube and Instagram Reels using yt-dlp"""
     
-    def __init__(self):
+    def __init__(self, youtube_api_key: str = None):
         self.ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
         }
+        self.youtube_api_key = youtube_api_key
     
     def extract_metadata(self, url: str, platform: str) -> Dict[str, Any]:
         """Extract all metadata from video URL"""
@@ -26,16 +27,22 @@ class VideoExtractor:
         
         # Extract follower count (yt-dlp may not have this for all platforms)
         follower_count = None
+        channel_id = None
+        
         if 'channel_follower_count' in info:
             follower_count = info['channel_follower_count']
         elif 'uploader_followers' in info:
             follower_count = info['uploader_followers']
         
+        # Get channel ID for YouTube API fallback
+        if platform == 'youtube':
+            channel_id = info.get('channel_id') or info.get('uploader_id')
+        
         # Extract hashtags from description
         description = info.get('description', '')
         hashtags = re.findall(r'#\w+', description)
         
-        # Calculate engagement rate (will be recomputed with actual likes/comments)
+        # Calculate engagement rate
         views = info.get('view_count', 0)
         likes = info.get('like_count', 0)
         comments = info.get('comment_count', 0)
@@ -47,6 +54,7 @@ class VideoExtractor:
             'platform': platform,
             'url': info.get('webpage_url', info.get('original_url', '')),
             'creator': info.get('uploader', info.get('channel', 'Unknown')),
+            'creator_id': channel_id,  # Store channel ID for potential API fallback
             'follower_count': follower_count,
             'title': info.get('title', ''),
             'views': views,
@@ -59,6 +67,54 @@ class VideoExtractor:
             'thumbnail': info.get('thumbnail', ''),
             'description': description[:500]  # Truncate for storage
         }
+        
+        return metadata
+    
+    def fetch_follower_count_via_api(self, channel_id: str) -> Optional[int]:
+        """
+        Fallback: Fetch subscriber count using YouTube Data API v3.
+        Returns None if API key not set or request fails.
+        """
+        if not self.youtube_api_key or not channel_id:
+            return None
+        
+        try:
+            from googleapiclient.discovery import build
+            from googleapiclient.errors import HttpError
+            
+            youtube = build('youtube', 'v3', developerKey=self.youtube_api_key)
+            request = youtube.channels().list(
+                part='statistics',
+                id=channel_id
+            )
+            response = request.execute()
+            
+            if response.get('items'):
+                subscriber_count = response['items'][0]['statistics'].get('subscriberCount')
+                if subscriber_count:
+                    return int(subscriber_count)
+            return None
+            
+        except HttpError as e:
+            print(f"YouTube API error: {e}")
+            return None
+        except Exception as e:
+            print(f"YouTube API fallback error: {e}")
+            return None
+    
+    def enrich_with_api_follower_count(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Enrich metadata with YouTube API follower count if yt-dlp failed.
+        """
+        # Only run for YouTube videos where follower_count is missing and we have channel_id
+        if (metadata['platform'] == 'youtube' and 
+            not metadata.get('follower_count') and 
+            metadata.get('creator_id')):
+            
+            api_followers = self.fetch_follower_count_via_api(metadata['creator_id'])
+            if api_followers:
+                metadata['follower_count'] = api_followers
+                print(f"✅ YouTube API fallback: Got {api_followers} subscribers for {metadata['creator']}")
         
         return metadata
     

@@ -13,8 +13,14 @@ class Config:
     # Groq
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
     
+    # YouTube Data API (for follower count fallback)
+    YOUTUBE_DATA_API_KEY = os.getenv("YOUTUBE_DATA_API_KEY", "")
+    
     # Optional OpenAI fallback
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    
+    # Hugging Face (optional, for better rate limits)
+    HF_TOKEN = os.getenv("HF_TOKEN", "")
     
     # Embedding
     EMBEDDING_MODEL = "BAAI/bge-large-en-v1.5"
