@@ -1,0 +1,128 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+
+@layer base {
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+}
+
+/* Page background gradient */
+.page-bg {
+  background: #FAFAFA;
+  position: relative;
+}
+.page-bg::before {
+  content: '';
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(253,186,116,0.18) 0%, rgba(253,186,116,0) 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-surface-200 rounded;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-surface-400 rounded;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-surface-500;
+}
+
+/* Streaming cursor animation */
+.streaming-cursor::after {
+  content: '▊';
+  animation: blink 1s step-end infinite;
+  @apply text-accent-500;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Progress step line */
+.step-line {
+  width: 48px;
+  height: 2px;
+  @apply bg-surface-300;
+}
+.step-line.active {
+  @apply bg-accent-400;
+}
+
+/* Card hover lift */
+.card-lift {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.card-lift:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
+}
+
+/* Orange send button glow */
+.send-glow {
+  box-shadow: 0 0 0 0 rgba(249,115,22,0.4);
+  transition: box-shadow 0.25s ease;
+}
+.send-glow:hover {
+  box-shadow: 0 0 12px 2px rgba(249,115,22,0.3);
+}
+
+/* Peach gradient button */
+.btn-peach {
+  background: linear-gradient(135deg, #FDBA74 0%, #FB923C 50%, #F97316 100%);
+  color: white;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  transition: opacity 0.2s, transform 0.15s;
+}
+.btn-peach:hover {
+  opacity: 0.92;
+  transform: scale(1.01);
+}
+.btn-peach:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Video overlay gradient */
+.video-overlay {
+  background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.7) 100%);
+}
+
+/* Fade in animation */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in-up {
+  animation: fadeInUp 0.4s ease-out forwards;
+}
+
+/* Tag pill */
+.tag-pill {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-100 text-surface-600 border border-surface-200;
+}
+
+/* Status badge */
+.status-loaded {
+  @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-accent-50 border border-accent-200 text-accent-700;
+}

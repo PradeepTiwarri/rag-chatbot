@@ -129,13 +129,7 @@ async def ingest_videos(request: IngestRequest):
         
         results[request.video_id_a] = {
             'status': 'success',
-            'metadata': {
-                'creator': youtube_metadata['creator'],
-                'follower_count': youtube_metadata['follower_count'],
-                'views': youtube_metadata['views'],
-                'likes': youtube_metadata['likes'],
-                'engagement_rate': youtube_metadata['engagement_rate']
-            },
+            'metadata': youtube_metadata,
             'chunk_counts': {
                 'fine': len(chunks['fine']),
                 'medium': len(chunks['medium']),
@@ -171,13 +165,7 @@ async def ingest_videos(request: IngestRequest):
         
         results[request.video_id_b] = {
             'status': 'success',
-            'metadata': {
-                'creator': instagram_metadata['creator'],
-                'follower_count': instagram_metadata['follower_count'],
-                'views': instagram_metadata['views'],
-                'likes': instagram_metadata['likes'],
-                'engagement_rate': instagram_metadata['engagement_rate']
-            },
+            'metadata': instagram_metadata,
             'chunk_counts': {
                 'fine': len(chunks['fine']),
                 'medium': len(chunks['medium']),
