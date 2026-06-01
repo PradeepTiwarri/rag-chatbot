@@ -117,7 +117,8 @@ class TranscriptFetcher:
             r'(?:youtube\.com\/watch\?v=)([\w-]+)',
             r'(?:youtu\.be\/)([\w-]+)',
             r'(?:youtube\.com\/embed\/)([\w-]+)',
-            r'(?:youtube\.com\/v\/)([\w-]+)'
+            r'(?:youtube\.com\/v\/)([\w-]+)',
+            r'(?:youtube\.com\/shorts\/)([\w-]+)',   # YouTube Shorts
         ]
         
         for pattern in patterns:

@@ -19,7 +19,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
   const [pipelineStep, setPipelineStep] = useState<PipelineStep>("idle");
 
   const validateYoutube = () => {
-    if (youtubeUrl.match(/youtube\.com\/watch|youtu\.be\//)) {
+    if (youtubeUrl.match(/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts\//)) {
       setYtValidated(true);
     }
   };

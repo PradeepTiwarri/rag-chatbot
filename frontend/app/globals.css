@@ -4,125 +4,196 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
 
+/* ── Brand tokens ───────────────────────────────── */
+:root {
+  --primary:   #FF4F00;
+  --secondary: #2B2B2B;
+  --tertiary:  #0051FF;
+  --neutral:   #F7F7F7;
+}
+
 @layer base {
   body {
     @apply bg-background text-foreground font-body antialiased;
+    background-color: var(--neutral);
+    color: var(--secondary);
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-display;
+    color: var(--secondary);
   }
 }
 
-/* Page background gradient */
+/* ── Page background ────────────────────────────── */
 .page-bg {
-  background: #FAFAFA;
+  background: #F7F7F7;
   position: relative;
 }
 .page-bg::before {
   content: '';
   position: absolute;
-  top: -60px;
-  right: -60px;
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, rgba(253,186,116,0.18) 0%, rgba(253,186,116,0) 70%);
+  top: -80px;
+  right: -80px;
+  width: 480px;
+  height: 480px;
+  background: radial-gradient(circle, rgba(255,79,0,0.07) 0%, rgba(255,79,0,0) 70%);
   pointer-events: none;
   z-index: 0;
 }
 
-/* Subtle scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  @apply bg-surface-200 rounded;
-}
-::-webkit-scrollbar-thumb {
-  @apply bg-surface-400 rounded;
-}
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-surface-500;
-}
+/* ── Scrollbar ──────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #EFEFEF; border-radius: 9999px; }
+::-webkit-scrollbar-thumb { background: #BDBDBD; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #9E9E9E; }
 
-/* Streaming cursor animation */
+/* ── Streaming cursor ───────────────────────────── */
 .streaming-cursor::after {
   content: '▊';
   animation: blink 1s step-end infinite;
-  @apply text-accent-500;
+  color: var(--primary);
 }
 @keyframes blink {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+  50%       { opacity: 0; }
 }
 
-/* Progress step line */
+/* ── Step progress line ─────────────────────────── */
 .step-line {
   width: 48px;
   height: 2px;
-  @apply bg-surface-300;
+  background: #E0E0E0;
 }
-.step-line.active {
-  @apply bg-accent-400;
-}
+.step-line.active { background: var(--primary); }
 
-/* Card hover lift */
-.card-lift {
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-}
+/* ── Card hover lift ────────────────────────────── */
+.card-lift { transition: box-shadow 0.2s ease, transform 0.2s ease; }
 .card-lift:hover {
-  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+  transform: translateY(-2px);
 }
 
-/* Orange send button glow */
-.send-glow {
-  box-shadow: 0 0 0 0 rgba(249,115,22,0.4);
-  transition: box-shadow 0.25s ease;
-}
-.send-glow:hover {
-  box-shadow: 0 0 12px 2px rgba(249,115,22,0.3);
-}
+/* ── Send button glow ───────────────────────────── */
+.send-glow { transition: box-shadow 0.25s ease; }
+.send-glow:hover { box-shadow: 0 0 14px 3px rgba(255,79,0,0.35); }
 
-/* Peach gradient button */
-.btn-peach {
-  background: linear-gradient(135deg, #FDBA74 0%, #FB923C 50%, #F97316 100%);
-  color: white;
+/* ── Primary CTA button ─────────────────────────── */
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   border-radius: 999px;
   transition: opacity 0.2s, transform 0.15s;
 }
-.btn-peach:hover {
-  opacity: 0.92;
-  transform: scale(1.01);
-}
-.btn-peach:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+.btn-primary:hover  { opacity: 0.90; transform: scale(1.01); }
+.btn-primary:active { opacity: 0.80; transform: scale(0.99); }
+.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 
-/* Video overlay gradient */
+/* backward compat alias */
+.btn-peach { @apply btn-primary; }
+
+/* ── Video overlay gradient ─────────────────────── */
 .video-overlay {
-  background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.7) 100%);
+  background: linear-gradient(180deg, transparent 35%, rgba(0,0,0,0.75) 100%);
 }
 
-/* Fade in animation */
+/* ── Fade-in animation ──────────────────────────── */
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0);    }
 }
-.fade-in-up {
-  animation: fadeInUp 0.4s ease-out forwards;
-}
+.fade-in-up { animation: fadeInUp 0.4s ease-out forwards; }
 
-/* Tag pill */
+/* ── Tag pill ───────────────────────────────────── */
 .tag-pill {
-  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-100 text-surface-600 border border-surface-200;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #EFEFEF;
+  color: #555;
+  border: 1px solid #E0E0E0;
 }
 
-/* Status badge */
+/* ── Status badge ───────────────────────────────── */
 .status-loaded {
-  @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-accent-50 border border-accent-200 text-accent-700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(255,79,0,0.07);
+  border: 1px solid rgba(255,79,0,0.2);
+  color: var(--primary);
+}
+
+/* ── Sidebar active item marker ─────────────────── */
+.nav-active {
+  background: rgba(255,79,0,0.07);
+  color: var(--primary);
+  font-weight: 600;
+  border-left: 3px solid var(--primary);
+}
+
+/* ── Platform badge chip ────────────────────────── */
+.chip-yt {
+  background: rgba(255,0,0,0.08);
+  color: #FF0000;
+  border: 1px solid rgba(255,0,0,0.15);
+}
+.chip-ig {
+  background: rgba(225,48,108,0.08);
+  color: #E1306C;
+  border: 1px solid rgba(225,48,108,0.15);
+}
+
+/* ── Instagram 9:16 portrait frame ─────────────── */
+.frame-portrait {
+  position: relative;
+  width: 100%;
+  padding-top: 177.78%; /* 9:16 */
+  overflow: hidden;
+  background: #000;
+}
+.frame-portrait > * {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── YouTube 16:9 landscape frame ──────────────── */
+.frame-landscape {
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%; /* 16:9 */
+  overflow: hidden;
+  background: #000;
+}
+.frame-landscape > * {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Thumbnail strip (3 frames) ─────────────────── */
+.thumb-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  background: #000;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+}
+.thumb-strip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }

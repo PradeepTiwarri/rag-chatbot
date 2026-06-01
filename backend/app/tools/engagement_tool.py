@@ -1,7 +1,6 @@
 from typing import List, Dict, Any
 
-# In production, this would fetch from database
-# For now, store in memory during session
+
 _metadata_cache = {}
 
 def store_video_metadata(video_id: str, metadata: Dict):
