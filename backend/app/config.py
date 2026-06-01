@@ -16,8 +16,14 @@ class Config:
     # YouTube Data API (for follower count fallback)
     YOUTUBE_DATA_API_KEY = os.getenv("YOUTUBE_DATA_API_KEY", "")
     
+    # Apify API (for Instagram view count fallback)
+    APIFY_API_KEY = os.getenv("APIFY_API_KEY", "")
+    
+    # SerpAPI (for Instagram follower count)
+    SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "")
+    
     # Optional OpenAI fallback
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     
     # Hugging Face (optional, for better rate limits)
     HF_TOKEN = os.getenv("HF_TOKEN", "")
@@ -29,7 +35,7 @@ class Config:
     # Chunking (Hierarchical)
     FINE_CHUNK_SIZE_SEC = 30
     FINE_OVERLAP_SEC = 10
-    MEDIUM_CHUNK_SIZE_SEC = 120  # 2 minutes
+    MEDIUM_CHUNK_SIZE_SEC = 120
     MEDIUM_OVERLAP_SEC = 30
     
     # Video sections (pre-computed)

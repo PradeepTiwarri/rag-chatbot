@@ -1,7 +1,7 @@
 import json
 from typing import Dict, Any, List, Literal
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint import MemorySaver
+from langgraph.checkpoint.memory import MemorySaver
 from groq import Groq
 
 from ..config import config
@@ -9,7 +9,6 @@ from ..ingestion.time_parser import time_parser, TimeRange
 from ..vector_store import pinecone_client
 from ..embedding import bge_embedder
 from .state import AgentState, get_initial_state
-from .graph import RAGAgent
 
 #  Groq client
 groq_client = Groq(api_key=config.GROQ_API_KEY)
