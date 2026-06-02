@@ -34,13 +34,10 @@ class PineconeClient:
             raise ValueError("PINECONE_API_KEY not set in environment")
         
         try:
-            # Initialize Pinecone v7+
             self._pc = Pinecone(api_key=config.PINECONE_API_KEY)
             
-            # Create index if it doesn't exist
             self._create_index_if_not_exists()
             
-            # Get index reference
             self._index = self._pc.Index(config.PINECONE_INDEX_NAME)
             
             print(f"Pinecone connected successfully. Index: {config.PINECONE_INDEX_NAME}")
@@ -52,24 +49,21 @@ class PineconeClient:
         """Create index if it doesn't exist"""
         index_name = config.PINECONE_INDEX_NAME
         
-        # List existing indexes
         existing_indexes = [idx.name for idx in self._pc.list_indexes()]
         
         if index_name not in existing_indexes:
             print(f"Creating Pinecone index: {index_name}")
             
-            # Serverless spec for free tier
             self._pc.create_index(
                 name=index_name,
                 dimension=config.EMBEDDING_DIMENSION,
                 metric="cosine",
                 spec=ServerlessSpec(
                     cloud="aws",
-                    region="us-east-1"  # Free tier region
+                    region="us-east-1"
                 )
             )
             
-            # Wait for index to be ready
             while not self._pc.describe_index(index_name).status['ready']:
                 time.sleep(1)
             print(f"Index {index_name} created successfully")
@@ -86,42 +80,55 @@ class PineconeClient:
         Returns:
             Number of vectors upserted
         """
+        print(f"\n=== UPSERTING CHUNKS FOR VIDEO {video_id} ===")
+        print(f"Total chunks received: {len(chunks)}")
+        
         if not chunks:
+            print(f"No chunks to upsert for video {video_id}")
             return 0
+        
+        # Count by level
+        level_counts = {}
+        for chunk in chunks:
+            level = chunk.get('chunk_level', 'unknown')
+            level_counts[level] = level_counts.get(level, 0) + 1
+        
+        print(f"Chunk breakdown: {level_counts}")
+        
+        for chunk in chunks[:5]:
+            print(f"  - {chunk['chunk_level']} chunk {chunk['chunk_index']}: {chunk['start_time']:.1f}-{chunk['end_time']:.1f}s")
+        
+        if len(chunks) > 5:
+            print(f"  ... and {len(chunks) - 5} more chunks")
         
         vectors = []
         
         for idx, chunk in enumerate(chunks):
-            # Generate unique ID
             chunk_id = f"{video_id}_{chunk['chunk_level']}_{chunk['chunk_index']}_{int(chunk['start_time'])}"
             
-            # Prepare metadata (Pinecone v7 expects dict)
             metadata = {
                 'video_id': video_id,
                 'chunk_level': chunk['chunk_level'],
                 'chunk_index': chunk['chunk_index'],
                 'start_time': chunk['start_time'],
                 'end_time': chunk['end_time'],
-                'text': chunk['text'][:1000],  # Truncate for metadata limit
+                'text': chunk['text'][:1000],
                 'section_type': chunk.get('section_type', 'unknown'),
                 'duration': chunk.get('duration', 0),
                 'segment_count': chunk.get('segment_count', 0)
             }
             
-            # Add overlap context if present
             if chunk.get('prev_chunk_end') is not None:
                 metadata['prev_chunk_end'] = chunk['prev_chunk_end']
             if chunk.get('next_chunk_start') is not None:
                 metadata['next_chunk_start'] = chunk['next_chunk_start']
             
-            # Create vector object
             vectors.append({
                 'id': chunk_id,
                 'values': chunk['embedding'],
                 'metadata': metadata
             })
         
-        # Upsert in batches of 100 (Pinecone free tier limit)
         batch_size = 100
         total_upserted = 0
         
@@ -138,21 +145,11 @@ class PineconeClient:
               filters: Optional[Dict] = None, namespace: str = "default") -> List[Dict]:
         """
         Query the vector database for similar chunks.
-        
-        Args:
-            query_embedding: Embedding vector of the query
-            top_k: Number of results to return
-            filters: Metadata filters (e.g., {'video_id': 'A', 'chunk_level': 'fine'})
-            namespace: Pinecone namespace
-            
-        Returns:
-            List of matching chunks with metadata and score
         """
         if not self._index:
             raise ValueError("Pinecone index not initialized")
         
         try:
-            # Query with filters
             response = self._index.query(
                 vector=query_embedding,
                 top_k=top_k,
@@ -161,7 +158,6 @@ class PineconeClient:
                 namespace=namespace
             )
             
-            # Format results
             results = []
             for match in response.matches:
                 results.append({
@@ -186,23 +182,9 @@ class PineconeClient:
                             namespace: str = "default") -> List[Dict]:
         """
         Query chunks that overlap with a specific time range.
-        Uses metadata filtering for efficiency.
-        
-        Args:
-            video_id: 'A' or 'B'
-            start_time: Start time in seconds
-            end_time: End time in seconds
-            chunk_level: Optional filter by 'fine', 'medium', or 'coarse'
-            top_k: Number of results
-            namespace: Pinecone namespace
-            
-        Returns:
-            List of chunks in the time range (sorted by start_time)
         """
-        # Build filter
         filters = {
             'video_id': video_id,
-            # Overlap condition: chunk_start < end_time AND chunk_end > start_time
             'start_time': {'$lt': end_time},
             'end_time': {'$gt': start_time}
         }
@@ -210,21 +192,17 @@ class PineconeClient:
         if chunk_level:
             filters['chunk_level'] = chunk_level
         
-        # Since Pinecone doesn't support complex overlap queries directly,
-        # we query with a dummy vector (all zeros) to get candidates,
-        # then filter results. For production, use a small embedding.
         dummy_embedding = [0.0] * config.EMBEDDING_DIMENSION
         
         try:
             response = self._index.query(
                 vector=dummy_embedding,
-                top_k=50,  # Get more candidates
+                top_k=50,
                 include_metadata=True,
                 filter=filters,
                 namespace=namespace
             )
             
-            # Sort by start_time
             results = []
             for match in response.matches:
                 results.append({
@@ -236,10 +214,8 @@ class PineconeClient:
                     'chunk_level': match.metadata.get('chunk_level')
                 })
             
-            # Sort by start_time
             results.sort(key=lambda x: x['start_time'])
             
-            # Limit to top_k
             return results[:top_k]
             
         except Exception as e:
@@ -263,20 +239,17 @@ class PineconeClient:
     def delete_video_chunks(self, video_id: str, namespace: str = "default") -> int:
         """
         Delete all chunks for a specific video.
-        Useful for re-ingestion.
         """
         try:
-            # Query to get all chunks for this video
             dummy_embedding = [0.0] * config.EMBEDDING_DIMENSION
             response = self._index.query(
                 vector=dummy_embedding,
-                top_k=10000,  # Get all
+                top_k=10000,
                 include_metadata=True,
                 filter={'video_id': video_id},
                 namespace=namespace
             )
             
-            # Extract IDs
             ids_to_delete = [match.id for match in response.matches]
             
             if ids_to_delete:
@@ -291,5 +264,4 @@ class PineconeClient:
             return 0
 
 
-# Singleton instance
 pinecone_client = PineconeClient()
