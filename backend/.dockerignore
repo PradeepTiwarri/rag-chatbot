@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv/
+venv/
+env/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Database / logs
+*.sqlite3
+*.log
+
+# Depending on your preference, you might want to exclude or include cookies. 
+# Usually, they are better mounted at runtime.
+# cookies.txt
+# youtube_cookies.txt
