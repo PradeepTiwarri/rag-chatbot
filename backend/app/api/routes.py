@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import asyncio
 import json
+import os
 
 from ..config import config
 from ..tools import store_video_metadata
@@ -37,6 +38,91 @@ class IngestRequest(BaseModel):
     instagram_url: str
     video_id_a: str = 'A'
     video_id_b: str = 'B'
+
+def create_manual_chunks(segments: List[Dict], duration: float, video_id: str) -> Dict[str, List[Dict]]:
+    """
+    Create manual chunks for fine, medium, and coarse levels.
+    """
+    print(f"MANUAL_CHUNKS: Starting for video {video_id}")
+    print(f"MANUAL_CHUNKS: Segments: {len(segments)}, Duration: {duration}")
+    
+    chunks = {'fine': [], 'medium': [], 'coarse': []}
+    
+    if not segments:
+        print("MANUAL_CHUNKS: No segments")
+        return chunks
+    
+    full_text = ' '.join([seg.get('text', '') for seg in segments])
+    text_length = len(full_text)
+    print(f"MANUAL_CHUNKS: Text length: {text_length}")
+    
+    if text_length == 0:
+        print("MANUAL_CHUNKS: Empty text")
+        return chunks
+    
+    if duration <= 0:
+        duration = max(60, text_length / 10)  # Estimate duration from text length
+        print(f"MANUAL_CHUNKS: Estimated duration: {duration}")
+    
+    # Create fine chunks (500 chars)
+    fine_chunk_size = 500
+    for i in range(0, text_length, fine_chunk_size):
+        chunk_text = full_text[i:i+fine_chunk_size]
+        if chunk_text.strip():
+            start_pct = i / text_length
+            end_pct = (i + len(chunk_text)) / text_length
+            estimated_start = start_pct * duration
+            estimated_end = end_pct * duration
+            
+            chunks['fine'].append({
+                'video_id': video_id,
+                'chunk_level': 'fine',
+                'chunk_index': len(chunks['fine']),
+                'start_time': estimated_start,
+                'end_time': estimated_end,
+                'text': chunk_text,
+                'duration': estimated_end - estimated_start,
+                'segment_count': 1,
+                'section_type': 'body',
+            })
+    
+    # Create medium chunks (1500 chars)
+    medium_chunk_size = 1500
+    for i in range(0, text_length, medium_chunk_size):
+        chunk_text = full_text[i:i+medium_chunk_size]
+        if chunk_text.strip():
+            start_pct = i / text_length
+            end_pct = (i + len(chunk_text)) / text_length
+            estimated_start = start_pct * duration
+            estimated_end = end_pct * duration
+            
+            chunks['medium'].append({
+                'video_id': video_id,
+                'chunk_level': 'medium',
+                'chunk_index': len(chunks['medium']),
+                'start_time': estimated_start,
+                'end_time': estimated_end,
+                'text': chunk_text,
+                'duration': estimated_end - estimated_start,
+                'segment_count': 1,
+                'section_type': 'body',
+            })
+    
+    # Create coarse chunk
+    chunks['coarse'].append({
+        'video_id': video_id,
+        'chunk_level': 'coarse',
+        'chunk_index': 0,
+        'start_time': 0.0,
+        'end_time': duration,
+        'text': full_text,
+        'duration': duration,
+        'segment_count': len(segments),
+        'section_type': 'full',
+    })
+    
+    print(f"MANUAL_CHUNKS: Created fine:{len(chunks['fine'])}, medium:{len(chunks['medium'])}, coarse:{len(chunks['coarse'])}")
+    return chunks
 
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
@@ -99,147 +185,111 @@ async def ingest_videos(request: IngestRequest):
     
     results = {}
     
-    # Process YouTube (Video A) - WITH YouTube API fallback
+    # Process YouTube (Video A)
     try:
-        # Initialize with YouTube API key for fallback
+        print("\n========== YOUTUBE ==========")
+        print(f"URL: {request.youtube_url}")
+        
         youtube_extractor = VideoExtractor(youtube_api_key=config.YOUTUBE_DATA_API_KEY)
         youtube_metadata = youtube_extractor.extract_metadata(request.youtube_url, "youtube")
-        
-        # Enrich with API follower count if needed
         youtube_metadata = youtube_extractor.enrich_with_api_follower_count(youtube_metadata)
-        
         youtube_metadata['video_id'] = request.video_id_a
         
         transcript_fetcher = TranscriptFetcher()
         youtube_segments = transcript_fetcher.fetch_youtube_transcript(request.youtube_url)
-        
         duration = youtube_metadata['duration_seconds']
         
-        chunks = hierarchical_chunker.chunk_video(
-            youtube_segments, duration, request.video_id_a
-        )
+        print(f"YOUTUBE: {len(youtube_segments)} segments, duration={duration}s")
+        
+        # Use manual chunks
+        chunks = create_manual_chunks(youtube_segments, duration, request.video_id_a)
         
         for level in ['fine', 'medium', 'coarse']:
             level_chunks = chunks[level]
             if level_chunks:
-                embedded_chunks = bge_embedder.embed_chunks_parallel(level_chunks, level)
-                pinecone_client.upsert_chunks(embedded_chunks, request.video_id_a)
+                print(f"YOUTUBE: Embedding {len(level_chunks)} {level} chunks...")
+                # Manually embed each chunk
+                for chunk in level_chunks:
+                    chunk['embedding'] = bge_embedder.embed_text(chunk['text'])
+                pinecone_client.upsert_chunks(level_chunks, request.video_id_a)
         
         store_video_metadata(request.video_id_a, youtube_metadata)
-        
-        results[request.video_id_a] = {
-            'status': 'success',
-            'metadata': youtube_metadata,
-            'chunk_counts': {
-                'fine': len(chunks['fine']),
-                'medium': len(chunks['medium']),
-                'coarse': len(chunks['coarse'])
-            }
-        }
+        results[request.video_id_a] = {'status': 'success', 'chunk_counts': {k: len(v) for k, v in chunks.items()}}
         
     except Exception as e:
+        print(f"YouTube error: {e}")
         results[request.video_id_a] = {'status': 'error', 'error': str(e)}
     
     # Process Instagram (Video B)
     try:
+        print("\n========== INSTAGRAM ==========")
+        print(f"URL: {request.instagram_url}")
+        
         transcript_fetcher = TranscriptFetcher()
-        instagram_metadata = None
-
-        # ----------------------------------
-        # PRIMARY = PLAYWRIGHT
-        # ----------------------------------
+        
+        # Get metadata
         try:
             from ..ingestion.instagram_playwright import InstagramPlaywrightExtractor
             pw = InstagramPlaywrightExtractor()
-            # Run sync Playwright in a worker thread — avoids Windows
-            # SelectorEventLoop subprocess transport NotImplementedError.
-            playwright_data = await asyncio.to_thread(
-                pw.extract, request.instagram_url
-            )
-            print("Instagram metadata extracted via Playwright")
-
-            # ----------------------------------
-            # MERGE WITH YT-DLP
-            # ----------------------------------
+            playwright_data = await asyncio.to_thread(pw.extract, request.instagram_url)
+            print("Playwright data obtained")
+            
             instagram_extractor = InstagramExtractor()
-            instagram_metadata = instagram_extractor.extract_metadata(
-                request.instagram_url, "instagram"
-            )
-
+            instagram_metadata = instagram_extractor.extract_metadata(request.instagram_url, "instagram")
+            
             instagram_metadata.update({
                 "creator": playwright_data.get("creator"),
-                "creator_id": playwright_data.get("creator_id"),
                 "follower_count": playwright_data.get("follower_count"),
-                "likes": playwright_data.get(
-                    "likes", instagram_metadata.get("likes", 0)
-                ),
-                "comments": playwright_data.get(
-                    "comments", instagram_metadata.get("comments", 0)
-                ),
-                "shares": playwright_data.get("shares"),
+                "likes": playwright_data.get("likes", instagram_metadata.get("likes", 0)),
+                "comments": playwright_data.get("comments", instagram_metadata.get("comments", 0)),
             })
-
-            # Re-estimate views with real Playwright likes/comments
-            # (yt-dlp returns 0 for hidden Instagram stats, Playwright gets real values)
+            
             final_likes = instagram_metadata.get("likes") or 0
             final_comments = instagram_metadata.get("comments") or 0
-            if final_likes > 0 or final_comments > 0:
+            if final_likes > 0:
                 estimated_views = (final_likes * 14) + (final_comments * 300)
                 instagram_metadata["views"] = estimated_views
-                instagram_metadata["engagement_rate"] = (
-                    (final_likes + final_comments) / estimated_views * 100
-                )
-                print(f"Instagram views re-estimated: {estimated_views:,} "
-                      f"(from {final_likes:,} likes, {final_comments:,} comments)")
-
+                instagram_metadata["engagement_rate"] = ((final_likes + final_comments) / estimated_views * 100)
+                print(f"Views estimated: {estimated_views:,}")
+                
         except Exception as pw_error:
             print(f"Playwright failed: {pw_error}")
-            print("Falling back to yt-dlp...")
-
             instagram_extractor = InstagramExtractor()
-            instagram_metadata = instagram_extractor.extract_metadata(
-                request.instagram_url, "instagram"
-            )
-
+            instagram_metadata = instagram_extractor.extract_metadata(request.instagram_url, "instagram")
+        
         instagram_metadata["video_id"] = request.video_id_b
-
-        instagram_segments = transcript_fetcher.fetch_instagram_transcript(
-            request.instagram_url
-        )
-
+        
+        # Get transcript
+        instagram_segments = transcript_fetcher.fetch_instagram_transcript(request.instagram_url)
         duration = instagram_metadata.get("duration_seconds", 0)
-
-        chunks = hierarchical_chunker.chunk_video(
-            instagram_segments, duration, request.video_id_b
-        )
-
-        for level in ["fine", "medium", "coarse"]:
+        
+        if duration == 0 and instagram_segments:
+            last_seg = instagram_segments[-1]
+            duration = last_seg.get('end', last_seg.get('start', 0)) + 2
+        
+        print(f"INSTAGRAM: {len(instagram_segments)} segments, duration={duration}s")
+        
+        # Use manual chunks
+        chunks = create_manual_chunks(instagram_segments, duration, request.video_id_b)
+        print(f"INSTAGRAM CHUNKS: fine={len(chunks['fine'])}, medium={len(chunks['medium'])}, coarse={len(chunks['coarse'])}")
+        
+        for level in ['fine', 'medium', 'coarse']:
             level_chunks = chunks[level]
             if level_chunks:
-                embedded_chunks = bge_embedder.embed_chunks_parallel(
-                    level_chunks, level
-                )
-                pinecone_client.upsert_chunks(
-                    embedded_chunks, request.video_id_b
-                )
-
+                print(f"INSTAGRAM: Embedding {len(level_chunks)} {level} chunks...")
+                # Manually embed each chunk
+                for chunk in level_chunks:
+                    chunk['embedding'] = bge_embedder.embed_text(chunk['text'])
+                pinecone_client.upsert_chunks(level_chunks, request.video_id_b)
+        
         store_video_metadata(request.video_id_b, instagram_metadata)
-
-        results[request.video_id_b] = {
-            "status": "success",
-            "metadata": instagram_metadata,
-            "chunk_counts": {
-                "fine": len(chunks["fine"]),
-                "medium": len(chunks["medium"]),
-                "coarse": len(chunks["coarse"])
-            }
-        }
-
+        results[request.video_id_b] = {'status': 'success', 'chunk_counts': {k: len(v) for k, v in chunks.items()}}
+        
     except Exception as e:
-        results[request.video_id_b] = {
-            "status": "error",
-            "error": str(e)
-        }
+        print(f"Instagram error: {e}")
+        import traceback
+        traceback.print_exc()
+        results[request.video_id_b] = {'status': 'error', 'error': str(e)}
     
     return results
 
