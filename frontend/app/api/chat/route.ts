@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { API_BASE_URL } from "../../config";
 
 export const runtime = "nodejs";
 
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
       let backendResponse: Response;
 
       try {
-        backendResponse = await fetch("http://localhost:8000/api/chat/stream", {
+        backendResponse = await fetch(`${API_BASE_URL}/api/chat/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

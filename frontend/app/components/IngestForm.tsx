@@ -1,4 +1,5 @@
 "use client";
+import { API_BASE_URL } from "../config";
 
 import { useState } from "react";
 import { IngestResponse, VideoMetadata } from "../types";
@@ -40,7 +41,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
     setPipelineStep("transcripts");
 
     try {
-      const response = await fetch("http://localhost:8000/api/ingest", {
+      const response = await fetch(`${API_BASE_URL}/api/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
