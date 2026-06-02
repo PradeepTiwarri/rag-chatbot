@@ -59,7 +59,7 @@ class TranscriptFetcher:
                 temp_audio = tmp.name
 
             # First pass: get metadata (including duration) without downloading
-            meta_opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
+            meta_opts = {'quiet': True, 'no_warnings': True, 'skip_download': True,'cookiefile':'/app/youtube_cookies.txt'}
             try:
                 with yt_dlp.YoutubeDL(meta_opts) as ydl_meta:
                     info = ydl_meta.extract_info(url, download=False)
@@ -76,6 +76,7 @@ class TranscriptFetcher:
                 }],
                 'quiet': True,
                 'no_warnings': True,
+                 'cookiefile': '/app/youtube_cookies.txt'
             }
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
