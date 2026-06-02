@@ -11,6 +11,10 @@ interface ChatPanelProps {
   videoIds: string[];
 }
 
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:8000";
+
 export default function ChatPanel({ videoIds }: ChatPanelProps) {
   const {
     messages,
@@ -20,7 +24,7 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
     isLoading,
     setInput,
   } = useChat({
-    api: "/api/chat",
+    api: `${API_URL}/api/chat`,
     body: { video_ids: videoIds },
     onError: (error) => {
       console.error("Chat error:", error);
