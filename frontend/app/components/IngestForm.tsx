@@ -41,7 +41,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
     setPipelineStep("transcripts");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/ingest`, {
+      const response = await fetch(`/api/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
