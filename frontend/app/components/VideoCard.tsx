@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { VideoMetadata } from "../types";
-import { Eye, ThumbsUp, MessageCircle, TrendingUp, Play } from "lucide-react";
+import { Eye, ThumbsUp, MessageCircle, TrendingUp, Play, ExternalLink } from "lucide-react";
 
 interface VideoCardProps {
   video: VideoMetadata;
@@ -22,20 +22,11 @@ function formatDuration(seconds: number): string {
   return `${m}:${s}`;
 }
 
-/** Derive 3 thumbnail URLs from a YouTube video ID at 0%, 40%, 75% of duration */
-function getYoutubeThumbnails(url: string): string[] {
+function getYoutubeVideoId(url: string): string | null {
   const match = url?.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]+)/);
-  const id = match?.[1];
-  if (!id) return [];
-  // YouTube provides mqdefault / hqdefault / sddefault — use hqdefault as base
-  return [
-    `https://img.youtube.com/vi/${id}/0.jpg`,
-    `https://img.youtube.com/vi/${id}/1.jpg`,
-    `https://img.youtube.com/vi/${id}/2.jpg`,
-  ];
+  return match?.[1] ?? null;
 }
 
-// ── YouTube SVG logo (exact brand red #FF0000) ─────────────────────────────
 function YoutubeLogo() {
   return (
     <svg width="22" height="16" viewBox="0 0 22 16" fill="none">
@@ -45,7 +36,6 @@ function YoutubeLogo() {
   );
 }
 
-// ── Instagram SVG logo (brand gradient) ────────────────────────────────────
 function InstagramLogo() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -67,58 +57,37 @@ function InstagramLogo() {
 }
 
 export default function VideoCard({ video }: VideoCardProps) {
-  const [thumbErrors, setThumbErrors] = useState<Record<number, boolean>>({});
+  const [thumbError, setThumbError] = useState(false);
   const isYoutube   = video.platform === "youtube";
   const isInstagram = video.platform === "instagram";
 
-  // ── Embed / frame logic ─────────────────────────────────────────────────
-  const getYoutubeEmbedUrl = () => {
-    if (!video.url) return null;
-    const match = video.url.match(
-      /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]+)/
-    );
-    const id = match?.[1];
-    return id ? `https://www.youtube.com/embed/${id}` : null;
-  };
+  const ytId       = isYoutube ? getYoutubeVideoId(video.url) : null;
+  const ytEmbed    = ytId ? `https://www.youtube.com/embed/${ytId}` : null;
+  const ytThumbs   = ytId
+    ? [`https://img.youtube.com/vi/${ytId}/0.jpg`, `https://img.youtube.com/vi/${ytId}/1.jpg`, `https://img.youtube.com/vi/${ytId}/2.jpg`]
+    : [];
 
-  const getInstagramEmbedUrl = () => {
-    if (!video.url) return null;
-    const match = video.url.match(/\/reel\/([\w-]+)/);
-    const id = match?.[1];
-    return id ? `https://www.instagram.com/p/${id}/embed` : null;
-  };
+  const igReelId   = isInstagram ? video.url?.match(/\/reel\/([\w-]+)/)?.[1] : null;
+  const igEmbed    = igReelId ? `https://www.instagram.com/p/${igReelId}/embed` : null;
 
-  const ytEmbedUrl  = isYoutube   ? getYoutubeEmbedUrl()   : null;
-  const igEmbedUrl  = isInstagram ? getInstagramEmbedUrl()  : null;
-  const ytThumbs    = isYoutube   ? getYoutubeThumbnails(video.url) : [];
-
-  // ── Metrics row ─────────────────────────────────────────────────────────
   const metrics = isYoutube
     ? [
         { label: "VIEWS",     value: formatCount(video.views),    icon: Eye           },
         { label: "LIKES",     value: formatCount(video.likes),    icon: ThumbsUp      },
         { label: "COMMENTS",  value: formatCount(video.comments), icon: MessageCircle },
-        {
-          label: "ENGAGEMENT",
-          value: video.engagement_rate ? `${video.engagement_rate.toFixed(1)}%` : "—",
-          icon: TrendingUp, highlight: true,
-        },
+        { label: "ENGAGEMENT", value: video.engagement_rate ? `${video.engagement_rate.toFixed(1)}%` : "—", icon: TrendingUp, highlight: true },
       ]
     : [
         { label: "EST. PLAYS", value: formatCount(video.views),    icon: Play          },
         { label: "LIKES",      value: formatCount(video.likes),    icon: ThumbsUp      },
         { label: "COMMENTS",   value: formatCount(video.comments), icon: MessageCircle },
-        {
-          label: "ENGAGEMENT",
-          value: video.engagement_rate ? `${video.engagement_rate.toFixed(1)}%` : "—",
-          icon: TrendingUp, highlight: true,
-        },
+        { label: "ENGAGEMENT", value: video.engagement_rate ? `${video.engagement_rate.toFixed(1)}%` : "—", icon: TrendingUp, highlight: true },
       ];
 
   return (
     <div className="bg-white rounded-2xl border border-neutral-200 shadow-card overflow-hidden card-lift">
 
-      {/* ── Header ─────────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="px-5 py-3.5 flex items-center justify-between border-b border-neutral-200">
         <div className="flex items-center gap-2.5">
           {isYoutube ? <YoutubeLogo /> : <InstagramLogo />}
@@ -130,34 +99,28 @@ export default function VideoCard({ video }: VideoCardProps) {
           className="text-[11px] font-mono px-2 py-0.5 rounded"
           style={{ background: "#F7F7F7", color: "#9E9E9E", border: "1px solid #E0E0E0" }}
         >
-          {video.video_id === "A" ? `yt_${video.views ? Math.floor(video.views / 1000) : "–"}` : `ig_${video.likes ? Math.floor(video.likes / 10) : "–"}`}
+          {video.video_id === "A"
+            ? `yt_${video.views ? Math.floor(video.views / 1000) : "–"}`
+            : `ig_${video.likes ? Math.floor(video.likes / 10) : "–"}`}
         </span>
       </div>
 
-      {/* ── Media area ─────────────────────────────────────────────────── */}
+      {/* Media */}
       {isYoutube ? (
-        /* YouTube: always 16:9 iframe embed */
         <div className="frame-landscape">
           <div>
-            {ytEmbedUrl ? (
+            {ytEmbed ? (
               <iframe
-                src={ytEmbedUrl}
+                src={ytEmbed}
                 className="w-full h-full"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
               />
             ) : (
-              /* fallback: 3-frame thumbnail strip */
               <div className="thumb-strip w-full h-full">
                 {ytThumbs.map((src, i) => (
-                  <img
-                    key={i}
-                    src={thumbErrors[i] ? "" : src}
-                    alt={`Frame ${i + 1}`}
-                    className="w-full h-full object-cover"
-                    onError={() => setThumbErrors((p) => ({ ...p, [i]: true }))}
-                  />
+                  <img key={i} src={src} alt={`Frame ${i + 1}`} className="w-full h-full object-cover" />
                 ))}
               </div>
             )}
@@ -172,57 +135,85 @@ export default function VideoCard({ video }: VideoCardProps) {
           </div>
         </div>
       ) : (
-        /* Instagram: Standard iframe inside 16:9 frame. No clipping/shifting to prevent Instagram from triggering a clickjacking redirect. */
-        <div className="frame-landscape">
-          {igEmbedUrl ? (
+        /* Instagram — use neutral bg, show embed or thumbnail or link fallback */
+        <div className="relative w-full overflow-hidden" style={{ background: "#F3F3F3" }}>
+          {igEmbed ? (
             <iframe
-              src={igEmbedUrl}
-              className="w-full h-full"
-              frameBorder="0"
+              src={igEmbed}
+              className="w-full border-0"
+              style={{ minHeight: 480, height: 480 }}
               scrolling="no"
               allowTransparency
               allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-              allowFullScreen
             />
+          ) : video.thumbnail && !thumbError ? (
+            <a href={video.url} target="_blank" rel="noopener noreferrer" className="block relative group">
+              <img
+                src={video.thumbnail}
+                alt={video.title || "Instagram Reel"}
+                className="w-full object-cover"
+                style={{ maxHeight: 400 }}
+                onError={() => setThumbError(true)}
+              />
+              <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center"
+                  style={{ background: "rgba(255,255,255,0.30)", backdropFilter: "blur(6px)" }}
+                >
+                  <Play className="w-8 h-8 text-white ml-1" />
+                </div>
+              </div>
+              {video.duration_seconds > 0 && (
+                <div
+                  className="absolute bottom-2 right-2 text-white text-[11px] font-mono px-2 py-0.5 rounded z-10"
+                  style={{ background: "rgba(0,0,0,0.72)" }}
+                >
+                  {formatDuration(video.duration_seconds)}
+                </div>
+              )}
+            </a>
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-black">
-              <Play className="w-12 h-12" style={{ color: "#9E9E9E" }} />
-            </div>
+            /* Graceful fallback — neutral card with link, no black box */
+            <a
+              href={video.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-center justify-center gap-3 py-16 hover:bg-neutral-100 transition-colors"
+            >
+              <div
+                className="w-14 h-14 rounded-full flex items-center justify-center"
+                style={{ background: "linear-gradient(135deg,#E1306C,#833AB4)" }}
+              >
+                <Play className="w-7 h-7 text-white ml-0.5" />
+              </div>
+              <span className="text-sm font-medium flex items-center gap-1.5" style={{ color: "#E1306C" }}>
+                View on Instagram <ExternalLink className="w-3.5 h-3.5" />
+              </span>
+            </a>
           )}
         </div>
       )}
 
-      {/* ── Metrics row ────────────────────────────────────────────────── */}
-      <div
-        className="grid grid-cols-4 border-t"
-        style={{ borderColor: "#E0E0E0" }}
-      >
+      {/* Metrics */}
+      <div className="grid grid-cols-4 border-t" style={{ borderColor: "#E0E0E0" }}>
         {metrics.map((m, idx) => (
           <div
             key={m.label}
             className="py-3 px-2 text-center"
-            style={{
-              borderRight: idx < metrics.length - 1 ? "1px solid #E0E0E0" : "none",
-            }}
+            style={{ borderRight: idx < metrics.length - 1 ? "1px solid #E0E0E0" : "none" }}
           >
             <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: "#9E9E9E" }}>
               {m.label}
             </p>
-            <p
-              className="text-[15px] font-bold"
-              style={{ color: m.highlight ? "#FF4F00" : "#2B2B2B" }}
-            >
+            <p className="text-[15px] font-bold" style={{ color: m.highlight ? "#FF4F00" : "#2B2B2B" }}>
               {m.value}
             </p>
           </div>
         ))}
       </div>
 
-      {/* ── Creator row ────────────────────────────────────────────────── */}
-      <div
-        className="px-5 py-3 border-t flex items-center justify-between"
-        style={{ borderColor: "#E0E0E0" }}
-      >
+      {/* Creator */}
+      <div className="px-5 py-3 border-t flex items-center justify-between" style={{ borderColor: "#E0E0E0" }}>
         <div className="flex items-center gap-2.5">
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white"
@@ -240,8 +231,7 @@ export default function VideoCard({ video }: VideoCardProps) {
             </p>
             <p className="text-[11px]" style={{ color: "#9E9E9E" }}>
               {video.follower_count
-                ? formatCount(video.follower_count) +
-                  (isYoutube ? " Subscribers" : " Followers")
+                ? formatCount(video.follower_count) + (isYoutube ? " Subscribers" : " Followers")
                 : ""}
             </p>
           </div>

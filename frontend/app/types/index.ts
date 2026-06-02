@@ -10,6 +10,7 @@ export interface VideoMetadata {
   comments: number;
   engagement_rate: number;
   thumbnail: string;
+  video_url?: string;  // Direct video URL for native playback (Instagram reels)
   duration_seconds: number;
   hashtags: string[];
 }

@@ -53,10 +53,20 @@ class TranscriptFetcher:
             raise Exception("Groq API key not configured for Whisper transcription")
         
         temp_audio = None
+        video_duration = 0.0
         try:
             with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmp:
                 temp_audio = tmp.name
-            
+
+            # First pass: get metadata (including duration) without downloading
+            meta_opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
+            try:
+                with yt_dlp.YoutubeDL(meta_opts) as ydl_meta:
+                    info = ydl_meta.extract_info(url, download=False)
+                    video_duration = float(info.get('duration') or 0)
+            except Exception:
+                pass
+
             ydl_opts = {
                 'format': 'bestaudio/best',
                 'outtmpl': temp_audio.replace('.mp3', ''),
@@ -67,14 +77,14 @@ class TranscriptFetcher:
                 'quiet': True,
                 'no_warnings': True,
             }
-            
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.extract_info(url, download=True)
-            
+
             actual_mp3 = temp_audio.replace('.mp3', '.mp3')
             if not os.path.exists(actual_mp3):
                 actual_mp3 = temp_audio + '.mp3'
-            
+
             with open(actual_mp3, 'rb') as audio_file:
                 transcription = self.groq_client.audio.transcriptions.create(
                     file=audio_file,
@@ -82,7 +92,7 @@ class TranscriptFetcher:
                     response_format="verbose_json",
                     timestamp_granularities=["word"]
                 )
-            
+
             segments = []
             if hasattr(transcription, 'segments') and transcription.segments:
                 for seg in transcription.segments:
@@ -93,12 +103,14 @@ class TranscriptFetcher:
                         'duration': seg.end - seg.start
                     })
             else:
-                segments.append({
-                    'text': transcription.text,
-                    'start': 0,
-                    'end': 0,
-                    'duration': 0
-                })
+                # No segment timestamps — split text into evenly-spaced segments
+                # distributed across the real video duration so the overlap_manager
+                # can create fine and medium time-window chunks.
+                # (end=0 / duration=0 causes seg_end > current_start to be False
+                # for every window, resulting in 0 fine/medium chunks.)
+                segments = self._split_flat_transcript(
+                    transcription.text, duration_hint=video_duration
+                )
             
             return segments
             
@@ -127,6 +139,41 @@ class TranscriptFetcher:
                 return match.group(1)
         return None
     
+    def _split_flat_transcript(
+        self, text: str, duration_hint: float, words_per_seg: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Split a flat (no-timestamp) transcript into evenly-spaced pseudo-segments
+        so the HierarchicalChunker's overlap_manager can produce fine and medium
+        chunks based on time windows.
+
+        Each segment covers ~words_per_seg words.  Timestamps are estimated by
+        distributing words uniformly across duration_hint.  If duration_hint==0
+        we assume 2 seconds per word (typical speech pace).
+        """
+        words = text.split()
+        if not words:
+            return [{'text': text, 'start': 0.0, 'end': max(duration_hint, 1.0),
+                     'duration': max(duration_hint, 1.0)}]
+
+        # Estimate duration from word count when we have no real duration
+        if duration_hint <= 0:
+            duration_hint = len(words) * 2.0  # ~150 wpm → 0.4 s/word; use 2 s to be safe
+
+        secs_per_word = duration_hint / len(words)
+        segments = []
+        for i in range(0, len(words), words_per_seg):
+            chunk_words = words[i: i + words_per_seg]
+            start = i * secs_per_word
+            end = min((i + len(chunk_words)) * secs_per_word, duration_hint)
+            segments.append({
+                'text': ' '.join(chunk_words),
+                'start': round(start, 2),
+                'end': round(end, 2),
+                'duration': round(end - start, 2),
+            })
+        return segments
+
     def get_full_transcript_text(self, segments: List[Dict]) -> str:
         """Combine segments into single string"""
         return ' '.join([seg['text'] for seg in segments])

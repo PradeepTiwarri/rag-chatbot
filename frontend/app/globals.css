@@ -172,9 +172,9 @@
 .frame-landscape {
   position: relative;
   width: 100%;
-  padding-top: 56.25%; /* 16:9 */
+  padding-top: 56.25%;
   overflow: hidden;
-  background: #000;
+  background: #1a1a1a;
 }
 .frame-landscape > * {
   position: absolute;

@@ -77,6 +77,7 @@ class VideoExtractor:
             'duration_seconds': info.get('duration', 0),
             'hashtags': hashtags,
             'thumbnail': info.get('thumbnail', ''),
+            'video_url': info.get('url', ''),  # Direct video URL (works for Instagram reels)
             'description': description[:500]  # Truncate for storage
         }
         
