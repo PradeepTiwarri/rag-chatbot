@@ -2,7 +2,10 @@ import os
 from dotenv import load_dotenv
 
 # Load .env from backend folder (parent of app)
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+print("ENV PATH:", env_path)
+print("ENV EXISTS:", os.path.exists(env_path))
+load_dotenv(env_path)
 
 class Config:
     # Pinecone
