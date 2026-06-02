@@ -1,5 +1,6 @@
 import yt_dlp
 import re
+import os
 from typing import Dict, Any, Optional
 
 class VideoExtractor:
@@ -10,6 +11,9 @@ class VideoExtractor:
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
+            'cookie_file':os.getenv(
+                'YTDLP_COOKIES_FILE",
+                'youtube_cookies.txt" ),
         }
         self.youtube_api_key = youtube_api_key
     
