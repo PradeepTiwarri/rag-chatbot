@@ -4,6 +4,7 @@ import re
 from typing import List, Dict, Any, Optional
 import groq
 import warnings
+import os
 from ..config import config
 
 # Suppress yt-dlp JS runtime warnings
@@ -14,6 +15,87 @@ class TranscriptFetcher:
     
     def __init__(self):
         self.groq_client = groq.Groq(api_key=config.GROQ_API_KEY) if config.GROQ_API_KEY else None
+        self.cookies_file = self._get_cookies_file_path()
+        self._validate_cookies_file()
+    
+    def _get_cookies_file_path(self) -> Optional[str]:
+        """Get the correct cookies file path for the environment"""
+        # Try multiple possible locations
+        possible_paths = [
+            '/app/youtube_cookies.txt',  # Docker production path
+            os.path.join(os.path.dirname(__file__), '..', '..', 'youtube_cookies.txt'),  # Backend root
+            os.path.join(os.path.dirname(__file__), '..', '..', 'cookies.txt'),  # Alternative name
+            'youtube_cookies.txt',  # Current directory
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                print(f"Found cookies file at: {path}")
+                return path
+        
+        print("No cookies file found in any location")
+        return None
+    
+    def _validate_cookies_file(self) -> bool:
+        """Validate that cookies file exists and is in correct Netscape format"""
+        if not self.cookies_file:
+            print("No cookies file configured")
+            return False
+        
+        if not os.path.exists(self.cookies_file):
+            print(f"Cookies file not found: {self.cookies_file}")
+            return False
+        
+        # Check file size - valid cookies file should be at least 500 bytes
+        file_size = os.path.getsize(self.cookies_file)
+        if file_size < 500:
+            print(f"Cookies file too small ({file_size} bytes) - likely invalid or empty")
+            return False
+        
+        # Check first line for Netscape format
+        try:
+            with open(self.cookies_file, 'r', encoding='utf-8') as f:
+                first_line = f.readline().strip()
+                if '# Netscape HTTP Cookie File' not in first_line:
+                    print("WARNING: Cookies file missing Netscape format header")
+                    print(f"First line: {first_line[:100]}")
+                    return False
+        except Exception as e:
+            print(f"Error reading cookies file: {e}")
+            return False
+        
+        # Check for YouTube cookies specifically
+        try:
+            with open(self.cookies_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                if '.youtube.com' not in content and 'youtube.com' not in content:
+                    print("WARNING: No YouTube cookies found in cookies file")
+                    return False
+        except Exception as e:
+            print(f"Error searching for YouTube cookies: {e}")
+            return False
+        
+        print(f"Cookies file validated successfully: {self.cookies_file} ({file_size} bytes)")
+        return True
+    
+    def _get_ydl_opts_with_cookies(self, extra_opts: Dict = None) -> Dict:
+        """Build yt-dlp options with validated cookies"""
+        base_opts = {
+            'quiet': True,
+            'no_warnings': True,
+        }
+        
+        if extra_opts:
+            base_opts.update(extra_opts)
+        
+        # Add cookies if file is valid
+        if self.cookies_file and self._validate_cookies_file():
+            base_opts['cookiefile'] = self.cookies_file
+            print(f"Using cookies file: {self.cookies_file}")
+        else:
+            print("No valid cookies file found, proceeding without authentication")
+        
+        return base_opts
     
     def fetch_youtube_transcript(self, url: str) -> List[Dict[str, Any]]:
         """Fetch transcript from YouTube with timestamps"""
@@ -47,7 +129,6 @@ class TranscriptFetcher:
         """Download audio and transcribe with Groq Whisper"""
         import yt_dlp
         import tempfile
-        import os
         
         if not self.groq_client:
             raise Exception("Groq API key not configured for Whisper transcription")
@@ -59,25 +140,24 @@ class TranscriptFetcher:
                 temp_audio = tmp.name
 
             # First pass: get metadata (including duration) without downloading
-            meta_opts = {'quiet': True, 'no_warnings': True, 'skip_download': True,'cookiefile':'/app/youtube_cookies.txt'}
+            meta_opts = self._get_ydl_opts_with_cookies({'skip_download': True})
             try:
                 with yt_dlp.YoutubeDL(meta_opts) as ydl_meta:
                     info = ydl_meta.extract_info(url, download=False)
                     video_duration = float(info.get('duration') or 0)
-            except Exception:
-                pass
+                    print(f"Video duration detected: {video_duration}s")
+            except Exception as e:
+                print(f"Could not fetch video duration: {e}")
 
-            ydl_opts = {
+            # Second pass: download audio
+            ydl_opts = self._get_ydl_opts_with_cookies({
                 'format': 'bestaudio/best',
                 'outtmpl': temp_audio.replace('.mp3', ''),
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
                 }],
-                'quiet': True,
-                'no_warnings': True,
-                 'cookiefile': '/app/youtube_cookies.txt'
-            }
+            })
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.extract_info(url, download=True)
@@ -85,6 +165,12 @@ class TranscriptFetcher:
             actual_mp3 = temp_audio.replace('.mp3', '.mp3')
             if not os.path.exists(actual_mp3):
                 actual_mp3 = temp_audio + '.mp3'
+
+            if not os.path.exists(actual_mp3):
+                raise Exception(f"Audio file not found at {actual_mp3}")
+
+            file_size = os.path.getsize(actual_mp3) / (1024 * 1024)
+            print(f"Audio downloaded: {file_size:.2f} MB")
 
             with open(actual_mp3, 'rb') as audio_file:
                 transcription = self.groq_client.audio.transcriptions.create(
@@ -103,12 +189,10 @@ class TranscriptFetcher:
                         'end': seg.end,
                         'duration': seg.end - seg.start
                     })
+                print(f"Whisper returned {len(segments)} timestamped segments")
             else:
                 # No segment timestamps — split text into evenly-spaced segments
-                # distributed across the real video duration so the overlap_manager
-                # can create fine and medium time-window chunks.
-                # (end=0 / duration=0 causes seg_end > current_start to be False
-                # for every window, resulting in 0 fine/medium chunks.)
+                print("No timestamps in Whisper response, creating estimated segments")
                 segments = self._split_flat_transcript(
                     transcription.text, duration_hint=video_duration
                 )
@@ -123,6 +207,12 @@ class TranscriptFetcher:
                     os.unlink(temp_audio)
                 except:
                     pass
+            # Clean up .mp3 file if it exists with different name
+            if temp_audio and os.path.exists(temp_audio + '.mp3'):
+                try:
+                    os.unlink(temp_audio + '.mp3')
+                except:
+                    pass
     
     def _extract_youtube_id(self, url: str) -> Optional[str]:
         """Extract YouTube video ID from URL"""
@@ -131,7 +221,7 @@ class TranscriptFetcher:
             r'(?:youtu\.be\/)([\w-]+)',
             r'(?:youtube\.com\/embed\/)([\w-]+)',
             r'(?:youtube\.com\/v\/)([\w-]+)',
-            r'(?:youtube\.com\/shorts\/)([\w-]+)',   # YouTube Shorts
+            r'(?:youtube\.com\/shorts\/)([\w-]+)',
         ]
         
         for pattern in patterns:
@@ -160,6 +250,7 @@ class TranscriptFetcher:
         # Estimate duration from word count when we have no real duration
         if duration_hint <= 0:
             duration_hint = len(words) * 2.0  # ~150 wpm → 0.4 s/word; use 2 s to be safe
+            print(f"Estimated duration from word count: {duration_hint}s")
 
         secs_per_word = duration_hint / len(words)
         segments = []
@@ -173,6 +264,8 @@ class TranscriptFetcher:
                 'end': round(end, 2),
                 'duration': round(end - start, 2),
             })
+        
+        print(f"Created {len(segments)} estimated segments from flat transcript")
         return segments
 
     def get_full_transcript_text(self, segments: List[Dict]) -> str:
