@@ -108,14 +108,8 @@ class TranscriptFetcher:
         
         # Try to get transcript via API first
         try:
-            # Try different import approach
-            try:
-                from youtube_transcript_api import YouTubeTranscriptApi as YTApi
-                transcript_list = YTApi.get_transcript(video_id)
-            except (ImportError, AttributeError):
-                # Fallback: use the module directly
-                import youtube_transcript_api
-                transcript_list = youtube_transcript_api.YouTubeTranscriptApi.get_transcript(video_id)
+            from youtube_transcript_api import YouTubeTranscriptApi as YTApi
+            transcript_list = YTApi.get_transcript(video_id)
             
             segments = []
             for item in transcript_list:
@@ -163,7 +157,7 @@ class TranscriptFetcher:
                 print(f"Could not fetch video duration: {e}")
                 # Try to get duration via yt-dlp command line
                 try:
-                    cmd = ['yt-dlp', '--cookies', self.cookies_file, '--skip-download', '--print', 'duration', url]
+                    cmd = ['yt-dlp', '--skip-download', '--print', 'duration', url]
                     if self.cookies_file and os.path.exists(self.cookies_file):
                         cmd = ['yt-dlp', '--cookies', self.cookies_file, '--skip-download', '--print', 'duration', url]
                     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -173,8 +167,8 @@ class TranscriptFetcher:
                 except Exception as cli_e:
                     print(f"CLI duration fetch failed: {cli_e}")
 
-            # Try format 140, fallback to 251, then bestaudio, then m4a
-            ydl_opts = self._get_yl_opts_with_cookies({
+            # Try format 140, fallback to 251, then bestaudio, then best
+            ydl_opts = self._get_ydl_opts_with_cookies({
                 'format': '140/251/bestaudio/best',
                 'outtmpl': temp_audio.replace('.mp3', ''),
                 'postprocessors': [{
