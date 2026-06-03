@@ -54,16 +54,9 @@ This is a full-stack RAG chatbot that compares YouTube videos and Instagram Reel
 
 ## 🎬 Live Demo
 
-**Try it yourself:** [https://your-app.vercel.app](https://your-app.vercel.app)
+**Try it yourself:** https://rag-chatbot-techsolv.vercel.app/
 
-**Watch the 5-min walkthrough:** [https://www.loom.com/YOUR_LINK](https://www.loom.com/YOUR_LINK)
-
-The Loom shows:
-
-- Ingestion working with real YouTube + Instagram URLs
-- Me trying to break it with prompt injection (spoiler: it holds up)
-- The self-correction loop in action
-- Cost breakdown for 1000 creators/day
+**Watch the 5-min walkthrough:** https://youtu.be/4RKWg4hpWR8?si=IC_6UaTkKeFowrC2
 
 ---
 
