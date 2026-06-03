@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 import groq
 import warnings
 import os
+import subprocess
 from ..config import config
 
 # Suppress yt-dlp JS runtime warnings
@@ -80,6 +81,12 @@ class TranscriptFetcher:
             'no_warnings': True,
             'js_runtimes': {'deno': {'path': '/root/.deno/bin/deno'}},
             'remote_components': ['ejs:github'],
+            'extractor_args': {
+                'youtube': {
+                    'skip': ['hls', 'dash'],
+                    'player_client': ['android', 'ios', 'web'],
+                }
+            }
         }
         
         if extra_opts:
@@ -99,8 +106,16 @@ class TranscriptFetcher:
         if not video_id:
             raise ValueError(f"Invalid YouTube URL: {url}")
         
+        # Try to get transcript via API first
         try:
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+            # Try different import approach
+            try:
+                from youtube_transcript_api import YouTubeTranscriptApi as YTApi
+                transcript_list = YTApi.get_transcript(video_id)
+            except (ImportError, AttributeError):
+                # Fallback: use the module directly
+                import youtube_transcript_api
+                transcript_list = youtube_transcript_api.YouTubeTranscriptApi.get_transcript(video_id)
             
             segments = []
             for item in transcript_list:
@@ -146,22 +161,26 @@ class TranscriptFetcher:
                     print(f"Video duration detected: {video_duration}s")
             except Exception as e:
                 print(f"Could not fetch video duration: {e}")
+                # Try to get duration via yt-dlp command line
+                try:
+                    cmd = ['yt-dlp', '--cookies', self.cookies_file, '--skip-download', '--print', 'duration', url]
+                    if self.cookies_file and os.path.exists(self.cookies_file):
+                        cmd = ['yt-dlp', '--cookies', self.cookies_file, '--skip-download', '--print', 'duration', url]
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                    if result.returncode == 0 and result.stdout.strip():
+                        video_duration = float(result.stdout.strip())
+                        print(f"Video duration via CLI: {video_duration}s")
+                except Exception as cli_e:
+                    print(f"CLI duration fetch failed: {cli_e}")
 
-            # Second pass: download audio with format fallback
-            # Try format 140 first (universal m4a), then fallback to bestaudio
-            ydl_opts = self._get_ydl_opts_with_cookies({
-                'format': '140/bestaudio',
+            # Try format 140, fallback to 251, then bestaudio, then m4a
+            ydl_opts = self._get_yl_opts_with_cookies({
+                'format': '140/251/bestaudio/best',
                 'outtmpl': temp_audio.replace('.mp3', ''),
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
                 }],
-                'extractor_args': {
-                    'youtube': {
-                        'skip': ['hls', 'dash'],
-                        'player_client': ['android', 'ios', 'web'],
-                    }
-                }
             })
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -170,6 +189,14 @@ class TranscriptFetcher:
             actual_mp3 = temp_audio.replace('.mp3', '.mp3')
             if not os.path.exists(actual_mp3):
                 actual_mp3 = temp_audio + '.mp3'
+            
+            # Try to find any mp3 file in temp directory
+            if not os.path.exists(actual_mp3):
+                temp_dir = os.path.dirname(temp_audio)
+                for file in os.listdir(temp_dir):
+                    if file.endswith('.mp3'):
+                        actual_mp3 = os.path.join(temp_dir, file)
+                        break
 
             if not os.path.exists(actual_mp3):
                 raise Exception(f"Audio file not found at {actual_mp3}")
