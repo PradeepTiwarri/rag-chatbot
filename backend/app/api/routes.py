@@ -61,7 +61,7 @@ def create_manual_chunks(segments: List[Dict], duration: float, video_id: str) -
         return chunks
     
     if duration <= 0:
-        duration = max(60, text_length / 10)  # Estimate duration from text length
+        duration = max(60, text_length / 10)
         print(f"MANUAL_CHUNKS: Estimated duration: {duration}")
     
     # Create fine chunks (500 chars)
@@ -208,17 +208,25 @@ async def ingest_videos(request: IngestRequest):
             level_chunks = chunks[level]
             if level_chunks:
                 print(f"YOUTUBE: Embedding {len(level_chunks)} {level} chunks...")
-                # Manually embed each chunk
                 for chunk in level_chunks:
                     chunk['embedding'] = bge_embedder.embed_text(chunk['text'])
                 pinecone_client.upsert_chunks(level_chunks, request.video_id_a)
         
         store_video_metadata(request.video_id_a, youtube_metadata)
-        results[request.video_id_a] = {'status': 'success', 'chunk_counts': {k: len(v) for k, v in chunks.items()}}
+        
+        # Return metadata along with chunk counts
+        results[request.video_id_a] = {
+            'status': 'success',
+            'metadata': youtube_metadata,
+            'chunk_counts': {k: len(v) for k, v in chunks.items()}
+        }
         
     except Exception as e:
         print(f"YouTube error: {e}")
-        results[request.video_id_a] = {'status': 'error', 'error': str(e)}
+        results[request.video_id_a] = {
+            'status': 'error',
+            'error': str(e)
+        }
     
     # Process Instagram (Video B)
     try:
@@ -277,19 +285,27 @@ async def ingest_videos(request: IngestRequest):
             level_chunks = chunks[level]
             if level_chunks:
                 print(f"INSTAGRAM: Embedding {len(level_chunks)} {level} chunks...")
-                # Manually embed each chunk
                 for chunk in level_chunks:
                     chunk['embedding'] = bge_embedder.embed_text(chunk['text'])
                 pinecone_client.upsert_chunks(level_chunks, request.video_id_b)
         
         store_video_metadata(request.video_id_b, instagram_metadata)
-        results[request.video_id_b] = {'status': 'success', 'chunk_counts': {k: len(v) for k, v in chunks.items()}}
+        
+        # Return metadata along with chunk counts
+        results[request.video_id_b] = {
+            'status': 'success',
+            'metadata': instagram_metadata,
+            'chunk_counts': {k: len(v) for k, v in chunks.items()}
+        }
         
     except Exception as e:
         print(f"Instagram error: {e}")
         import traceback
         traceback.print_exc()
-        results[request.video_id_b] = {'status': 'error', 'error': str(e)}
+        results[request.video_id_b] = {
+            'status': 'error',
+            'error': str(e)
+        }
     
     return results
 
