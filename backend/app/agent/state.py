@@ -1,5 +1,4 @@
-from typing import List, Dict, Any, Optional, TypedDict, Annotated
-from dataclasses import dataclass, field
+from typing import List, Dict, Any, Optional, TypedDict
 from enum import Enum
 
 class AgentState(TypedDict):
@@ -8,15 +7,15 @@ class AgentState(TypedDict):
     # Input
     question: str
     session_id: str
-    video_ids: List[str]  # ['A', 'B']
+    video_ids: List[str]
     
     # Time parsing
     has_time_component: bool
-    time_range: Optional[Dict[str, float]]  # {'start': 0, 'end': 5}
+    time_range: Optional[Dict[str, float]]
     
     # Retrieval
     retrieved_chunks: List[Dict[str, Any]]
-    retrieval_quality: str  # 'good', 'partial', 'poor'
+    retrieval_quality: str
     retry_count: int
     
     # Tools
@@ -25,13 +24,13 @@ class AgentState(TypedDict):
     
     # Generation
     answer: str
-    citations: List[Dict[str, Any]]  # [{'video_id': 'A', 'timestamp': '0:00-0:05', 'text': '...'}]
+    citations: List[Dict[str, Any]]
     
     # Memory
     conversation_history: List[Dict[str, str]]
     
     # Control
-    next_action: str  # 'retrieve', 'grade', 'rewrite', 'use_tool', 'generate', 'end'
+    next_action: str
     error: Optional[str]
 
 
@@ -41,7 +40,6 @@ class RetrievalQuality(Enum):
     POOR = "poor"
 
 
-# Initial state template
 def get_initial_state(question: str, session_id: str, video_ids: List[str]) -> AgentState:
     return {
         'question': question,
