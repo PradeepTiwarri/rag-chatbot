@@ -15,14 +15,15 @@ export async function POST(req: NextRequest) {
 
   const encoder = new TextEncoder();
 
+  // Encode text chunk in AI SDK format
   function encodeTextChunk(text: string): Uint8Array {
     const escaped = JSON.stringify(text);
     return encoder.encode(`0:${escaped}\n`);
   }
 
-  // Helper to send citations
-  function encodeCitationsChunk(citations: any[]): Uint8Array {
-    return encoder.encode(`2:${JSON.stringify({ citations })}\n`);
+  // Encode finish message
+  function encodeFinishChunk(): Uint8Array {
+    return encoder.encode(`d:{"finishReason":"stop"}\n`);
   }
 
   const stream = new ReadableStream({
@@ -67,7 +68,6 @@ export async function POST(req: NextRequest) {
       }
 
       let buffer = "";
-      let citationsSent = false;
 
       try {
         while (true) {
@@ -85,15 +85,7 @@ export async function POST(req: NextRequest) {
             try {
               const data = JSON.parse(trimmed);
 
-              // Send citations first
-              if (data.type === "citations" && !citationsSent) {
-                if (data.data && Array.isArray(data.data)) {
-                  controller.enqueue(encodeCitationsChunk(data.data));
-                  citationsSent = true;
-                }
-              }
-              
-              // Send text tokens
+              // Only send text tokens - skip citations to avoid parsing errors
               if (data.type === "token" && typeof data.data === "string") {
                 controller.enqueue(encodeTextChunk(data.data));
               }
@@ -122,6 +114,10 @@ export async function POST(req: NextRequest) {
             // ignore
           }
         }
+
+        // Send finish message
+        controller.enqueue(encodeFinishChunk());
+        
       } catch (err) {
         console.error("Stream processing error:", err);
         controller.enqueue(encodeTextChunk("\n⚠️ Connection interrupted"));
