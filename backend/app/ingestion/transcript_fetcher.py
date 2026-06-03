@@ -20,12 +20,11 @@ class TranscriptFetcher:
     
     def _get_cookies_file_path(self) -> Optional[str]:
         """Get the correct cookies file path for the environment"""
-        # Try multiple possible locations
         possible_paths = [
-            '/app/youtube_cookies.txt',  # Docker production path
-            os.path.join(os.path.dirname(__file__), '..', '..', 'youtube_cookies.txt'),  # Backend root
-            os.path.join(os.path.dirname(__file__), '..', '..', 'cookies.txt'),  # Alternative name
-            'youtube_cookies.txt',  # Current directory
+            '/app/youtube_cookies.txt',
+            os.path.join(os.path.dirname(__file__), '..', '..', 'youtube_cookies.txt'),
+            os.path.join(os.path.dirname(__file__), '..', '..', 'cookies.txt'),
+            'youtube_cookies.txt',
         ]
         
         for path in possible_paths:
@@ -46,25 +45,21 @@ class TranscriptFetcher:
             print(f"Cookies file not found: {self.cookies_file}")
             return False
         
-        # Check file size - valid cookies file should be at least 500 bytes
         file_size = os.path.getsize(self.cookies_file)
         if file_size < 500:
             print(f"Cookies file too small ({file_size} bytes) - likely invalid or empty")
             return False
         
-        # Check first line for Netscape format
         try:
             with open(self.cookies_file, 'r', encoding='utf-8') as f:
                 first_line = f.readline().strip()
                 if '# Netscape HTTP Cookie File' not in first_line:
                     print("WARNING: Cookies file missing Netscape format header")
-                    print(f"First line: {first_line[:100]}")
                     return False
         except Exception as e:
             print(f"Error reading cookies file: {e}")
             return False
         
-        # Check for YouTube cookies specifically
         try:
             with open(self.cookies_file, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -79,16 +74,17 @@ class TranscriptFetcher:
         return True
     
     def _get_ydl_opts_with_cookies(self, extra_opts: Dict = None) -> Dict:
-        """Build yt-dlp options with validated cookies"""
+        """Build yt-dlp options with validated cookies, Deno, and remote components"""
         base_opts = {
             'quiet': True,
             'no_warnings': True,
+            'js_runtimes': {'deno': {'path': '/root/.deno/bin/deno'}},
+            'remote_components': ['ejs:github'],
         }
         
         if extra_opts:
             base_opts.update(extra_opts)
         
-        # Add cookies if file is valid
         if self.cookies_file and self._validate_cookies_file():
             base_opts['cookiefile'] = self.cookies_file
             print(f"Using cookies file: {self.cookies_file}")
@@ -115,10 +111,12 @@ class TranscriptFetcher:
                     'duration': item['duration']
                 })
             
+            print(f"Retrieved {len(segments)} transcript segments via YouTube API")
             return segments
         
         except Exception as e:
-            print(f"No YouTube captions found for {video_id}, falling back to Whisper...")
+            print(f"No YouTube captions found for {video_id}: {e}")
+            print("Falling back to Whisper audio transcription...")
             return self._fetch_via_whisper(url)
     
     def fetch_instagram_transcript(self, url: str) -> List[Dict[str, Any]]:
@@ -149,7 +147,7 @@ class TranscriptFetcher:
             except Exception as e:
                 print(f"Could not fetch video duration: {e}")
 
-            # Second pass: download audio
+            # Second pass: download audio with full options
             ydl_opts = self._get_ydl_opts_with_cookies({
                 'format': 'bestaudio/best',
                 'outtmpl': temp_audio.replace('.mp3', ''),
@@ -157,6 +155,12 @@ class TranscriptFetcher:
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
                 }],
+                'extractor_args': {
+                    'youtube': {
+                        'skip': ['hls', 'dash'],
+                        'player_client': ['android', 'ios'],
+                    }
+                }
             })
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -191,7 +195,6 @@ class TranscriptFetcher:
                     })
                 print(f"Whisper returned {len(segments)} timestamped segments")
             else:
-                # No segment timestamps — split text into evenly-spaced segments
                 print("No timestamps in Whisper response, creating estimated segments")
                 segments = self._split_flat_transcript(
                     transcription.text, duration_hint=video_duration
@@ -207,7 +210,6 @@ class TranscriptFetcher:
                     os.unlink(temp_audio)
                 except:
                     pass
-            # Clean up .mp3 file if it exists with different name
             if temp_audio and os.path.exists(temp_audio + '.mp3'):
                 try:
                     os.unlink(temp_audio + '.mp3')
@@ -237,19 +239,14 @@ class TranscriptFetcher:
         Split a flat (no-timestamp) transcript into evenly-spaced pseudo-segments
         so the HierarchicalChunker's overlap_manager can produce fine and medium
         chunks based on time windows.
-
-        Each segment covers ~words_per_seg words.  Timestamps are estimated by
-        distributing words uniformly across duration_hint.  If duration_hint==0
-        we assume 2 seconds per word (typical speech pace).
         """
         words = text.split()
         if not words:
             return [{'text': text, 'start': 0.0, 'end': max(duration_hint, 1.0),
                      'duration': max(duration_hint, 1.0)}]
 
-        # Estimate duration from word count when we have no real duration
         if duration_hint <= 0:
-            duration_hint = len(words) * 2.0  # ~150 wpm → 0.4 s/word; use 2 s to be safe
+            duration_hint = len(words) * 2.0
             print(f"Estimated duration from word count: {duration_hint}s")
 
         secs_per_word = duration_hint / len(words)
