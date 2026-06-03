@@ -48,18 +48,32 @@ class InstagramPlaywrightExtractor:
                 page.goto(
                     reel_url,
                     wait_until="domcontentloaded",
-                    timeout=60000,
+                    timeout=90000,
                 )
 
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(5000)
 
-                og_url = page.locator(
-                    'meta[property="og:url"]'
-                ).get_attribute("content")
+                og_url = None
+                try:
+                    og_url = page.locator(
+                        'meta[property="og:url"]'
+                    ).get_attribute("content", timeout=10000)
+                except Exception as e:
+                    print(f"Could not get og:url: {e}")
 
-                reel_desc = page.locator(
-                    'meta[property="og:description"]'
-                ).get_attribute("content")
+                reel_desc = None
+                try:
+                    reel_desc = page.locator(
+                        'meta[property="og:description"]'
+                    ).get_attribute("content", timeout=10000)
+                except Exception as e:
+                    print(f"Could not get og:description: {e}, trying og:title")
+                    try:
+                        reel_desc = page.locator(
+                            'meta[property="og:title"]'
+                        ).get_attribute("content", timeout=10000)
+                    except Exception as e2:
+                        print(f"Could not get og:title either: {e2}")
 
                 username_match = re.search(
                     r"instagram\.com/([^/]+)/reel",
@@ -106,30 +120,33 @@ class InstagramPlaywrightExtractor:
                         f"https://www.instagram.com/{username}/"
                     )
 
-                    page.goto(
-                        profile_url,
-                        wait_until="domcontentloaded",
-                        timeout=60000,
-                    )
-
-                    page.wait_for_timeout(2000)
-
-                    profile_desc = page.locator(
-                        'meta[property="og:description"]'
-                    ).get_attribute("content")
-
-                    if profile_desc:
-
-                        followers_match = re.search(
-                            r'([\d.,]+[KMB]?)\s+Followers',
-                            profile_desc,
-                            re.I,
+                    try:
+                        page.goto(
+                            profile_url,
+                            wait_until="domcontentloaded",
+                            timeout=60000,
                         )
 
-                        if followers_match:
-                            followers = self.parse_count(
-                                followers_match.group(1)
+                        page.wait_for_timeout(3000)
+
+                        profile_desc = page.locator(
+                            'meta[property="og:description"]'
+                        ).get_attribute("content", timeout=10000)
+
+                        if profile_desc:
+
+                            followers_match = re.search(
+                                r'([\d.,]+[KMB]?)\s+Followers',
+                                profile_desc,
+                                re.I,
                             )
+
+                            if followers_match:
+                                followers = self.parse_count(
+                                    followers_match.group(1)
+                                )
+                    except Exception as e:
+                        print(f"Could not fetch profile for {username}: {e}")
 
                 return {
                     "creator": username,
@@ -140,6 +157,16 @@ class InstagramPlaywrightExtractor:
                     "shares": None,
                 }
 
+            except Exception as e:
+                print(f"Playwright extraction failed: {e}")
+                return {
+                    "creator": None,
+                    "creator_id": None,
+                    "follower_count": None,
+                    "likes": 0,
+                    "comments": 0,
+                    "shares": None,
+                }
             finally:
                 page.close()
                 context.close()
