@@ -7,6 +7,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
+    console.log("Proxying ingest to:", `${API_BASE_URL}/api/ingest`);
+
     const response = await fetch(`${API_BASE_URL}/api/ingest`, {
       method: "POST",
       headers: {
@@ -25,7 +27,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       {
-        error: "Failed to connect to backend",
+        A: { status: "error", error: "Failed to connect to backend" },
+        B: { status: "error", error: "Failed to connect to backend" }
       },
       {
         status: 500,
