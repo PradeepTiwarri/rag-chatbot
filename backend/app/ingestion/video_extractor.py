@@ -11,15 +11,54 @@ class VideoExtractor:
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
-            'cookie_file':os.getenv(
-                'YTDLP_COOKIES_FILE',
-                'youtube_cookies.txt' ),
         }
         self.youtube_api_key = youtube_api_key
+        self.cookies_file = self._get_cookies_file_path()
+        self._validate_cookies_file()
+    
+    def _get_cookies_file_path(self) -> Optional[str]:
+        """Get the correct cookies file path for the environment"""
+        possible_paths = [
+            '/app/youtube_cookies.txt',
+            os.path.join(os.path.dirname(__file__), '..', '..', 'youtube_cookies.txt'),
+            'youtube_cookies.txt',
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                print(f"Found cookies file at: {path}")
+                return path
+        return None
+    
+    def _validate_cookies_file(self) -> bool:
+        """Validate that cookies file exists and is usable"""
+        if not self.cookies_file:
+            return False
+        if not os.path.exists(self.cookies_file):
+            return False
+        file_size = os.path.getsize(self.cookies_file)
+        if file_size < 500:
+            print(f"Cookies file too small ({file_size} bytes)")
+            return False
+        return True
+    
+    def _get_ydl_opts(self, extra_opts: Dict = None) -> Dict:
+        """Build yt-dlp options with cookies and Deno"""
+        base_opts = self.ydl_opts.copy()
+        
+        if extra_opts:
+            base_opts.update(extra_opts)
+        
+        if self.cookies_file and self._validate_cookies_file():
+            base_opts['cookiefile'] = self.cookies_file
+            base_opts['js_runtimes'] = {'deno': {'path': '/root/.deno/bin/deno'}}
+            base_opts['remote_components'] = ['ejs:github']
+            print(f"Using cookies file for metadata: {self.cookies_file}")
+        
+        return base_opts
     
     def extract_metadata(self, url: str, platform: str) -> Dict[str, Any]:
         """Extract all metadata from video URL"""
-        with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(self._get_ydl_opts()) as ydl:
             try:
                 info = ydl.extract_info(url, download=False)
                 return self._parse_metadata(info, platform)
@@ -29,7 +68,6 @@ class VideoExtractor:
     def _parse_metadata(self, info: Dict, platform: str) -> Dict[str, Any]:
         """Parse raw yt-dlp output into structured metadata"""
         
-        # Extract follower count (yt-dlp may not have this for all platforms)
         follower_count = None
         channel_id = None
         
@@ -38,20 +76,24 @@ class VideoExtractor:
         elif 'uploader_followers' in info:
             follower_count = info['uploader_followers']
         
-        # Get channel ID for YouTube API fallback
         if platform == 'youtube':
             channel_id = info.get('channel_id') or info.get('uploader_id')
         
-        # Extract hashtags from description
         description = info.get('description', '')
         hashtags = re.findall(r'#\w+', description)
         
-        # Null-guard: yt-dlp returns None for hidden Instagram stats
-        views = info.get('view_count') or 0
-        likes = info.get('like_count') or 0
-        comments = info.get('comment_count') or 0
+        views = info.get('view_count')
+        if views is None:
+            views = 0
         
-        # For Instagram, estimate views from likes+comments when unavailable
+        likes = info.get('like_count')
+        if likes is None:
+            likes = 0
+        
+        comments = info.get('comment_count')
+        if comments is None:
+            comments = 0
+        
         if platform == 'instagram' and views == 0:
             if likes > 0 or comments > 0:
                 LIKES_MULTIPLIER = 14
@@ -59,18 +101,17 @@ class VideoExtractor:
                 views = (likes * LIKES_MULTIPLIER) + (comments * COMMENTS_MULTIPLIER)
                 print(f"Instagram views estimated: {views:,} (from {likes:,} likes, {comments:,} comments)")
             else:
-                # Minimum floor when no engagement data at all
                 views = 500
-                print("Instagram views set to floor: 500 (no engagement data from yt-dlp)")
+                print("Instagram views set to floor: 500")
         
         engagement_rate = ((likes + comments) / views * 100) if views > 0 else 0
         
         metadata = {
-            'video_id': None,  # Will be set by caller (A or B)
+            'video_id': None,
             'platform': platform,
             'url': info.get('webpage_url', info.get('original_url', '')),
             'creator': info.get('uploader', info.get('channel', 'Unknown')),
-            'creator_id': channel_id,  # Store channel ID for potential API fallback
+            'creator_id': channel_id,
             'follower_count': follower_count,
             'title': info.get('title', ''),
             'views': views,
@@ -81,17 +122,14 @@ class VideoExtractor:
             'duration_seconds': info.get('duration', 0),
             'hashtags': hashtags,
             'thumbnail': info.get('thumbnail', ''),
-            'video_url': info.get('url', ''),  # Direct video URL (works for Instagram reels)
-            'description': description[:500]  # Truncate for storage
+            'video_url': info.get('url', ''),
+            'description': description[:500]
         }
         
         return metadata
     
     def fetch_follower_count_via_api(self, channel_id: str) -> Optional[int]:
-        """
-        Fallback: Fetch subscriber count using YouTube Data API v3.
-        Returns None if API key not set or request fails.
-        """
+        """Fetch subscriber count using YouTube Data API v3"""
         if not self.youtube_api_key or not channel_id:
             return None
         
@@ -120,10 +158,7 @@ class VideoExtractor:
             return None
     
     def enrich_with_api_follower_count(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Enrich metadata with YouTube API follower count if yt-dlp failed.
-        """
-        # Only run for YouTube videos where follower_count is missing and we have channel_id
+        """Enrich metadata with YouTube API follower count if yt-dlp failed"""
         if (metadata['platform'] == 'youtube' and 
             not metadata.get('follower_count') and 
             metadata.get('creator_id')):
@@ -131,32 +166,27 @@ class VideoExtractor:
             api_followers = self.fetch_follower_count_via_api(metadata['creator_id'])
             if api_followers:
                 metadata['follower_count'] = api_followers
-                print(f"✅ YouTube API fallback: Got {api_followers} subscribers for {metadata['creator']}")
+                print(f"YouTube API fallback: Got {api_followers} subscribers for {metadata['creator']}")
         
         return metadata
     
     def get_duration_seconds(self, url: str) -> int:
         """Quickly get duration without full metadata extraction"""
-        with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
+        with yt_dlp.YoutubeDL(self._get_ydl_opts()) as ydl:
             info = ydl.extract_info(url, download=False)
             return info.get('duration', 0)
 
 
-# For Instagram Reels - Instagram-specific extraction
 class InstagramExtractor(VideoExtractor):
     """Specialized extractor for Instagram Reels with follower count from profile"""
     
     def extract_metadata(self, url: str, platform: str = "instagram") -> Dict[str, Any]:
-        with yt_dlp.YoutubeDL({
-            **self.ydl_opts,
-            'cookiefile': None,  # Instagram may require cookies for some data
-        }) as ydl:
+        with yt_dlp.YoutubeDL(self._get_ydl_opts()) as ydl:
             try:
                 info = ydl.extract_info(url, download=False)
                 metadata = self._parse_metadata(info, platform)
                 
-                # Instagram: try to get follower count from channel info
-                if not metadata['follower_count'] and 'channel_id' in info:
+                if not metadata['follower_count'] and 'channel_id' in info and info['channel_id']:
                     try:
                         channel_info = ydl.extract_info(f"https://www.instagram.com/{info['channel_id']}/", download=False)
                         metadata['follower_count'] = channel_info.get('channel_follower_count')
