@@ -11,10 +11,6 @@ interface ChatPanelProps {
   videoIds: string[];
 }
 
-//const API_URL =
- // process.env.NEXT_PUBLIC_API_URL ||
- // "http://localhost:8000";
-
 export default function ChatPanel({ videoIds }: ChatPanelProps) {
   const {
     messages,
@@ -23,6 +19,7 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
     handleSubmit,
     isLoading,
     setInput,
+    error,
   } = useChat({
     api: `/api/chat`,
     body: { video_ids: videoIds },
@@ -38,7 +35,7 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Parse citations from message content
+  // Parse citations from message content (citations are now embedded in the text)
   const parseCitations = (
     content: string
   ): { text: string; citations: Citation[] } => {
@@ -106,6 +103,13 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
           </button>
         </div>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="mx-5 mt-2 p-2 bg-red-50 border border-red-200 rounded-lg text-red-600 text-xs">
+          Chat error: {error.message}
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
