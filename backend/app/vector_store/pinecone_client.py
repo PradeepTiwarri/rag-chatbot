@@ -6,13 +6,6 @@ from ..config import config
 class PineconeClient:
     """
     Pinecone vector database client for storing and retrieving chunk embeddings.
-    Uses Pinecone v7+ API (modern syntax).
-    
-    Index Configuration:
-    - Name: rag-chatbot
-    - Dimension: 1024 (BGE-large)
-    - Metric: cosine
-    - Metadata indexed: video_id, chunk_level, start_time, end_time, section_type
     """
     
     _instance = None
@@ -29,26 +22,19 @@ class PineconeClient:
             self._initialize()
     
     def _initialize(self):
-        """Initialize Pinecone connection"""
         if not config.PINECONE_API_KEY:
             raise ValueError("PINECONE_API_KEY not set in environment")
         
         try:
             self._pc = Pinecone(api_key=config.PINECONE_API_KEY)
-            
             self._create_index_if_not_exists()
-            
             self._index = self._pc.Index(config.PINECONE_INDEX_NAME)
-            
             print(f"Pinecone connected successfully. Index: {config.PINECONE_INDEX_NAME}")
-            
         except Exception as e:
             raise Exception(f"Failed to initialize Pinecone: {str(e)}")
     
     def _create_index_if_not_exists(self):
-        """Create index if it doesn't exist"""
         index_name = config.PINECONE_INDEX_NAME
-        
         existing_indexes = [idx.name for idx in self._pc.list_indexes()]
         
         if index_name not in existing_indexes:
@@ -58,10 +44,7 @@ class PineconeClient:
                 name=index_name,
                 dimension=config.EMBEDDING_DIMENSION,
                 metric="cosine",
-                spec=ServerlessSpec(
-                    cloud="aws",
-                    region="us-east-1"
-                )
+                spec=ServerlessSpec(cloud="aws", region="us-east-1")
             )
             
             while not self._pc.describe_index(index_name).status['ready']:
@@ -69,17 +52,6 @@ class PineconeClient:
             print(f"Index {index_name} created successfully")
     
     def upsert_chunks(self, chunks: List[Dict[str, Any]], video_id: str, namespace: str = "default") -> int:
-        """
-        Upload chunks with embeddings to Pinecone.
-        
-        Args:
-            chunks: List of chunk dicts with 'embedding', 'text', and metadata fields
-            video_id: 'A' or 'B'
-            namespace: Pinecone namespace (default)
-            
-        Returns:
-            Number of vectors upserted
-        """
         print(f"\n=== UPSERTING CHUNKS FOR VIDEO {video_id} ===")
         print(f"Total chunks received: {len(chunks)}")
         
@@ -87,7 +59,6 @@ class PineconeClient:
             print(f"No chunks to upsert for video {video_id}")
             return 0
         
-        # Count by level
         level_counts = {}
         for chunk in chunks:
             level = chunk.get('chunk_level', 'unknown')
@@ -143,13 +114,13 @@ class PineconeClient:
     
     def query(self, query_embedding: List[float], top_k: int = 5, 
               filters: Optional[Dict] = None, namespace: str = "default") -> List[Dict]:
-        """
-        Query the vector database for similar chunks.
-        """
         if not self._index:
             raise ValueError("Pinecone index not initialized")
         
         try:
+            if filters:
+                print(f"Pinecone query filters: {filters}")
+            
             response = self._index.query(
                 vector=query_embedding,
                 top_k=top_k,
@@ -160,15 +131,16 @@ class PineconeClient:
             
             results = []
             for match in response.matches:
+                metadata = match.metadata or {}
                 results.append({
                     'id': match.id,
                     'score': match.score,
-                    'metadata': match.metadata,
-                    'video_id': match.metadata.get('video_id'),
-                    'chunk_level': match.metadata.get('chunk_level'),
-                    'start_time': match.metadata.get('start_time'),
-                    'end_time': match.metadata.get('end_time'),
-                    'text': match.metadata.get('text', '')
+                    'metadata': metadata,
+                    'video_id': metadata.get('video_id'),
+                    'chunk_level': metadata.get('chunk_level'),
+                    'start_time': metadata.get('start_time'),
+                    'end_time': metadata.get('end_time'),
+                    'text': metadata.get('text', '')
                 })
             
             return results
@@ -180,9 +152,6 @@ class PineconeClient:
     def query_by_time_range(self, video_id: str, start_time: float, end_time: float,
                             chunk_level: Optional[str] = None, top_k: int = 10,
                             namespace: str = "default") -> List[Dict]:
-        """
-        Query chunks that overlap with a specific time range.
-        """
         filters = {
             'video_id': video_id,
             'start_time': {'$lt': end_time},
@@ -205,17 +174,17 @@ class PineconeClient:
             
             results = []
             for match in response.matches:
+                metadata = match.metadata or {}
                 results.append({
                     'id': match.id,
                     'score': match.score,
-                    'start_time': match.metadata.get('start_time'),
-                    'end_time': match.metadata.get('end_time'),
-                    'text': match.metadata.get('text', ''),
-                    'chunk_level': match.metadata.get('chunk_level')
+                    'start_time': metadata.get('start_time'),
+                    'end_time': metadata.get('end_time'),
+                    'text': metadata.get('text', ''),
+                    'chunk_level': metadata.get('chunk_level')
                 })
             
             results.sort(key=lambda x: x['start_time'])
-            
             return results[:top_k]
             
         except Exception as e:
@@ -223,7 +192,6 @@ class PineconeClient:
             return []
     
     def get_stats(self, namespace: str = "default") -> Dict:
-        """Get index statistics"""
         try:
             stats = self._index.describe_index_stats()
             return {
@@ -237,9 +205,6 @@ class PineconeClient:
             return {}
     
     def delete_video_chunks(self, video_id: str, namespace: str = "default") -> int:
-        """
-        Delete all chunks for a specific video.
-        """
         try:
             dummy_embedding = [0.0] * config.EMBEDDING_DIMENSION
             response = self._index.query(
