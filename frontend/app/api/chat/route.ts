@@ -10,19 +10,19 @@ export async function POST(req: NextRequest) {
   const lastMessage = messages[messages.length - 1];
   const question = lastMessage.content;
 
-  // Generate session ID (use timestamp + random)
+  // Generate session ID
   const sessionId = `web_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
   const encoder = new TextEncoder();
 
-  /**
-   * Encode a text chunk in the AI SDK Data Stream Protocol.
-   * Format: `0:"<escaped-text>"\n`
-   * This is what @ai-sdk/react useChat() expects.
-   */
   function encodeTextChunk(text: string): Uint8Array {
-    const escaped = JSON.stringify(text); // handles quotes, newlines, etc.
+    const escaped = JSON.stringify(text);
     return encoder.encode(`0:${escaped}\n`);
+  }
+
+  // Helper to send citations
+  function encodeCitationsChunk(citations: any[]): Uint8Array {
+    return encoder.encode(`2:${JSON.stringify({ citations })}\n`);
   }
 
   const stream = new ReadableStream({
@@ -30,6 +30,8 @@ export async function POST(req: NextRequest) {
       let backendResponse: Response;
 
       try {
+        console.log("Connecting to backend:", `${API_BASE_URL}/api/chat/stream`);
+        
         backendResponse = await fetch(`${API_BASE_URL}/api/chat/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -40,8 +42,8 @@ export async function POST(req: NextRequest) {
           }),
         });
       } catch (err) {
-        // Network error reaching the backend
         const msg = err instanceof Error ? err.message : String(err);
+        console.error("Backend connection error:", msg);
         controller.enqueue(encodeTextChunk(`⚠️ Could not reach backend: ${msg}`));
         controller.close();
         return;
@@ -49,6 +51,7 @@ export async function POST(req: NextRequest) {
 
       if (!backendResponse.ok) {
         const errText = await backendResponse.text().catch(() => "Unknown error");
+        console.error("Backend error response:", backendResponse.status, errText);
         controller.enqueue(
           encodeTextChunk(`⚠️ Backend error (${backendResponse.status}): ${errText}`)
         );
@@ -64,6 +67,7 @@ export async function POST(req: NextRequest) {
       }
 
       let buffer = "";
+      let citationsSent = false;
 
       try {
         while (true) {
@@ -71,10 +75,7 @@ export async function POST(req: NextRequest) {
           if (done) break;
 
           buffer += new TextDecoder().decode(value, { stream: true });
-
-          // Process complete newline-delimited JSON lines
           const lines = buffer.split("\n");
-          // Keep the last (potentially incomplete) segment in the buffer
           buffer = lines.pop() ?? "";
 
           for (const line of lines) {
@@ -84,21 +85,33 @@ export async function POST(req: NextRequest) {
             try {
               const data = JSON.parse(trimmed);
 
+              // Send citations first
+              if (data.type === "citations" && !citationsSent) {
+                if (data.data && Array.isArray(data.data)) {
+                  controller.enqueue(encodeCitationsChunk(data.data));
+                  citationsSent = true;
+                }
+              }
+              
+              // Send text tokens
               if (data.type === "token" && typeof data.data === "string") {
                 controller.enqueue(encodeTextChunk(data.data));
-              } else if (data.type === "error") {
+              }
+              
+              // Handle errors
+              if (data.type === "error") {
                 controller.enqueue(
                   encodeTextChunk(`\n⚠️ ${data.data ?? "An error occurred"}`)
                 );
               }
-              // "citations", "start", "end" — silently ignored for now
-            } catch {
-              // Non-JSON line — skip silently
+            } catch (e) {
+              // Non-JSON line - skip silently
+              console.debug("Failed to parse line:", trimmed);
             }
           }
         }
 
-        // Flush any remaining buffer content
+        // Flush any remaining buffer
         if (buffer.trim()) {
           try {
             const data = JSON.parse(buffer.trim());
@@ -106,9 +119,12 @@ export async function POST(req: NextRequest) {
               controller.enqueue(encodeTextChunk(data.data));
             }
           } catch {
-            /* ignore incomplete/non-JSON tail */
+            // ignore
           }
         }
+      } catch (err) {
+        console.error("Stream processing error:", err);
+        controller.enqueue(encodeTextChunk("\n⚠️ Connection interrupted"));
       } finally {
         controller.close();
         reader.releaseLock();
@@ -118,7 +134,6 @@ export async function POST(req: NextRequest) {
 
   return new Response(stream, {
     headers: {
-      // Required content-type for @ai-sdk/react useChat() data stream protocol
       "Content-Type": "text/plain; charset=utf-8",
       "X-Vercel-AI-Data-Stream": "v1",
     },
