@@ -147,9 +147,10 @@ class TranscriptFetcher:
             except Exception as e:
                 print(f"Could not fetch video duration: {e}")
 
-            # Second pass: download audio with full options
+            # Second pass: download audio with format fallback
+            # Try format 140 first (universal m4a), then fallback to bestaudio
             ydl_opts = self._get_ydl_opts_with_cookies({
-                'format': 'bestaudio/best',
+                'format': '140/bestaudio',
                 'outtmpl': temp_audio.replace('.mp3', ''),
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
@@ -158,7 +159,7 @@ class TranscriptFetcher:
                 'extractor_args': {
                     'youtube': {
                         'skip': ['hls', 'dash'],
-                        'player_client': ['android', 'ios'],
+                        'player_client': ['android', 'ios', 'web'],
                     }
                 }
             })
