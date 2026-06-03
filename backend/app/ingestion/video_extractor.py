@@ -12,8 +12,8 @@ class VideoExtractor:
             'no_warnings': True,
             'extract_flat': False,
             'cookie_file':os.getenv(
-                'YTDLP_COOKIES_FILE",
-                'youtube_cookies.txt" ),
+                'YTDLP_COOKIES_FILE',
+                'youtube_cookies.txt' ),
         }
         self.youtube_api_key = youtube_api_key
     
