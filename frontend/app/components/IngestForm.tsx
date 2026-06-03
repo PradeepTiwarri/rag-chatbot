@@ -59,17 +59,16 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
       if (
         data.A.status === "success" &&
         data.B.status === "success" &&
-        data.A.metadata &&
-        data.B.metadata
+        
       ) {
         setPipelineStep("done");
-        setTimeout(() => {
-          onIngestComplete(data.A.metadata!, data.B.metadata!);
-        }, 600);
+        // setTimeout(() => {
+        //   onIngestComplete(data.A.metadata!, data.B.metadata!);
+        // }, 600);
       } else {
         const errorMsg =
           data.A.error || data.B.error || "Unknown error during ingestion";
-        alert(`Ingestion error: ${errorMsg}`);
+        console.log(`Ingestion error: ${errorMsg}`);
         setPipelineStep("idle");
       }
     } catch (error) {
