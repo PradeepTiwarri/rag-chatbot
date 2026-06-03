@@ -134,10 +134,6 @@ class RAGAgent:
         video_ids = state['video_ids']
         time_range = state.get('time_range')
         
-        print(f"\n=== RETRIEVING CHUNKS ===")
-        print(f"Question: {question}")
-        print(f"Video IDs requested: {video_ids}")
-        
         question_embedding = bge_embedder.embed_text(question)
         
         all_chunks = []
@@ -158,53 +154,17 @@ class RAGAgent:
                 else:
                     filters['chunk_level'] = 'coarse'
             
-            print(f"Querying for video_id: {video_id} with filters: {filters}")
-            
             results = pinecone_client.query(
                 query_embedding=question_embedding,
-                top_k=10,
+                top_k=5,
                 filters=filters
             )
             
-            print(f"Raw results count for {video_id}: {len(results)}")
-            
             for result in results:
-                result_video_id = result.get('video_id')
-                if result_video_id and result_video_id.upper() == video_id.upper():
-                    result['video_id'] = video_id
-                    all_chunks.append(result)
-                    print(f"  Added chunk with score={result.get('score', 0):.4f}")
-            
-            print(f"Filtered results for {video_id}: {len([r for r in results if r.get('video_id') == video_id])}")
+                result['video_id'] = video_id
+                all_chunks.append(result)
         
-        # Fallback for missing video
-        video_b_chunks = [c for c in all_chunks if c.get('video_id') == 'B']
-        if len(video_b_chunks) == 0 and 'B' in video_ids:
-            print("\nWARNING: No results for Video B. Attempting query without video_id filter...")
-            
-            results = pinecone_client.query(
-                query_embedding=question_embedding,
-                top_k=10,
-                filters=None
-            )
-            
-            for result in results:
-                result_video_id = result.get('video_id')
-                if result_video_id and result_video_id.upper() == 'B':
-                    result['video_id'] = 'B'
-                    all_chunks.append(result)
-                    print(f"Fallback: Added Video B chunk")
-        
-        all_chunks.sort(key=lambda x: x.get('score', 0), reverse=True)
-        
-        chunks_by_video = {}
-        for chunk in all_chunks:
-            vid = chunk.get('video_id', 'unknown')
-            chunks_by_video[vid] = chunks_by_video.get(vid, 0) + 1
-        
-        print(f"\n=== RETRIEVAL SUMMARY ===")
-        for vid, count in chunks_by_video.items():
-            print(f"Video {vid}: {count} chunks")
+        all_chunks.sort(key=lambda x: x['score'], reverse=True)
         
         state['retrieved_chunks'] = all_chunks[:10]
         
@@ -287,54 +247,33 @@ class RAGAgent:
         
         context = ""
         citations = []
-        videos_with_data = set()
         
         if state.get('tool_results'):
             context = str(state['tool_results'])
         elif state.get('retrieved_chunks'):
             for idx, chunk in enumerate(state['retrieved_chunks'][:5]):
-                video_id = chunk.get('video_id', 'Unknown')
+                video_id = chunk['video_id']
                 start = chunk.get('start_time', 0)
                 end = chunk.get('end_time', 0)
                 text = chunk.get('text', '')
                 
-                videos_with_data.add(video_id)
-                
-                start_rounded = round(start, 1)
-                end_rounded = round(end, 1)
-                
-                context += f"\n[Video {video_id}, {start_rounded}-{end_rounded}s]: {text}\n"
+                context += f"\n[Video {video_id}, {start:.0f}-{end:.0f}s]: {text}\n"
                 
                 citations.append({
                     'video_id': video_id,
-                    'timestamp': f"{start_rounded}-{end_rounded}s",
+                    'timestamp': f"{start:.0f}-{end:.0f}s",
                     'text': text[:200]
                 })
-            
-            for video_id in state['video_ids']:
-                if video_id not in videos_with_data:
-                    context += f"\n[Video {video_id}]: No transcript data available for this video.\n"
-                    print(f"WARNING: No data for Video {video_id}")
         else:
             context = "No relevant information found."
         
-        missing_videos = [vid for vid in state['video_ids'] if vid not in videos_with_data]
-        availability_note = ""
-        if missing_videos:
-            availability_note = f"\nNOTE: Videos {', '.join(missing_videos)} have no transcript data available. Only answer based on available videos."
-        
-        system_prompt = f"""You are a video analysis expert. Answer questions about video content, engagement metrics, and creator information.
+        system_prompt = """You are a video analysis expert. Answer questions about video content, engagement metrics, and creator information.
 
 Always cite your sources using [Video A] or [Video B] with timestamps.
 
 If comparing videos, highlight differences clearly.
 
-Be concise but informative.
-
-If a video is mentioned in the question but no data is available for that video, state clearly: "No information available for Video X."
-
-{availability_note}
-"""
+Be concise but informative."""
 
         user_prompt = f"""Context:
 {context}
