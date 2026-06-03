@@ -58,9 +58,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
 
       if (
         data.A.status === "success" &&
-        data.B.status === "success" &&
-        
-      ) {
+        data.B.status === "success"   ) {
         setPipelineStep("done");
         // setTimeout(() => {
         //   onIngestComplete(data.A.metadata!, data.B.metadata!);
