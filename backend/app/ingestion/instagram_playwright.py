@@ -40,7 +40,7 @@ class InstagramPlaywrightExtractor:
                 page.goto(reel_url, wait_until="domcontentloaded", timeout=60000)
                 page.wait_for_timeout(3000)
 
-                # Step 2: Get og:url to extract username (same as working function)
+                # Step 2: Get og:url to extract username
                 og_url = page.locator('meta[property="og:url"]').get_attribute("content", timeout=10000)
                 username = self._extract_username_from_url(og_url)
                 
@@ -71,7 +71,7 @@ class InstagramPlaywrightExtractor:
                         likes, comments = self._extract_likes_comments_from_desc(reel_desc)
                         print(f"Meta extraction - likes: {likes}, comments: {comments}")
                 
-                # Step 4: Get follower count from profile page (same reliable method)
+                # Step 4: Get follower count from profile page
                 followers = None
                 if username:
                     followers = self._get_follower_count(page, username)
@@ -105,7 +105,7 @@ class InstagramPlaywrightExtractor:
         return match.group(1) if match else None
 
     def _extract_username_from_url(self, og_url: str) -> str:
-        """Extract username from og:url - same as extract_username function"""
+        """Extract username from og:url"""
         if not og_url:
             return None
         match = re.search(r"instagram\.com/([^/]+)/reel", og_url, re.IGNORECASE)
@@ -125,68 +125,68 @@ class InstagramPlaywrightExtractor:
         return likes, comments
 
     def _get_follower_count(self, page, username: str) -> int:
-    """Get follower count from profile page using multiple methods"""
-    try:
-        profile_url = f"https://www.instagram.com/{username}/"
-        print(f"Fetching profile for {username}...")
-        
-        # Navigate to profile page
-        page.goto(profile_url, wait_until="networkidle", timeout=60000)
-        
-        # Wait longer for content to load
-        page.wait_for_timeout(5000)
-        
-        # Method 1: Try script tag (most reliable)
-        scripts = page.locator("script").all()
-        for script in scripts:
+        """Get follower count from profile page using multiple methods"""
+        try:
+            profile_url = f"https://www.instagram.com/{username}/"
+            print(f"Fetching profile for {username}...")
+            
+            # Navigate to profile page
+            page.goto(profile_url, wait_until="networkidle", timeout=60000)
+            
+            # Wait longer for content to load
+            page.wait_for_timeout(5000)
+            
+            # Method 1: Try script tag (most reliable)
+            scripts = page.locator("script").all()
+            for script in scripts:
+                try:
+                    txt = script.text_content()
+                    if txt and ('edge_followed_by' in txt or 'follower_count' in txt):
+                        # Try different regex patterns
+                        match = re.search(r'"edge_followed_by":\s*{\s*"count":\s*(\d+)', txt)
+                        if not match:
+                            match = re.search(r'"follower_count":\s*(\d+)', txt)
+                        if match:
+                            followers = int(match.group(1))
+                            print(f"Found followers via script: {followers}")
+                            return followers
+                except:
+                    pass
+            
+            # Method 2: Wait for meta description with retry
+            for attempt in range(3):
+                try:
+                    description = page.locator('meta[property="og:description"]').get_attribute("content", timeout=10000)
+                    if description:
+                        # Try different patterns
+                        match = re.search(r'([\d.,]+[KMB]?)\s+Followers', description, re.I)
+                        if not match:
+                            match = re.search(r'([\d.,]+[KMB]?)\s+followers', description, re.I)
+                        if match:
+                            followers_raw = match.group(1)
+                            followers = self.parse_count(followers_raw)
+                            print(f"Found followers via meta: {followers} ({followers_raw})")
+                            return followers
+                except Exception as e:
+                    print(f"Attempt {attempt + 1} failed: {e}")
+                    page.wait_for_timeout(2000)
+            
+            # Method 3: Try to get from page title or body
             try:
-                txt = script.text_content()
-                if txt and ('edge_followed_by' in txt or 'follower_count' in txt):
-                    # Try different regex patterns
-                    match = re.search(r'"edge_followed_by":\s*{\s*"count":\s*(\d+)', txt)
-                    if not match:
-                        match = re.search(r'"follower_count":\s*(\d+)', txt)
-                    if match:
-                        followers = int(match.group(1))
-                        print(f"Found followers via script: {followers}")
-                        return followers
+                page.wait_for_selector('header section', timeout=10000)
+                content = page.content()
+                match = re.search(r'([\d.,]+[KMB]?)\s+Followers', content, re.I)
+                if match:
+                    followers_raw = match.group(1)
+                    followers = self.parse_count(followers_raw)
+                    print(f"Found followers via page content: {followers} ({followers_raw})")
+                    return followers
             except:
                 pass
-        
-        # Method 2: Wait for meta description with retry
-        for attempt in range(3):
-            try:
-                description = page.locator('meta[property="og:description"]').get_attribute("content", timeout=10000)
-                if description:
-                    # Try different patterns
-                    match = re.search(r'([\d.,]+[KMB]?)\s+Followers', description, re.I)
-                    if not match:
-                        match = re.search(r'([\d.,]+[KMB]?)\s+followers', description, re.I)
-                    if match:
-                        followers_raw = match.group(1)
-                        followers = self.parse_count(followers_raw)
-                        print(f"Found followers via meta: {followers} ({followers_raw})")
-                        return followers
-            except Exception as e:
-                print(f"Attempt {attempt + 1} failed: {e}")
-                page.wait_for_timeout(2000)
-        
-        # Method 3: Try to get from page title or body
-        try:
-            page.wait_for_selector('header section', timeout=10000)
-            content = page.content()
-            match = re.search(r'([\d.,]+[KMB]?)\s+Followers', content, re.I)
-            if match:
-                followers_raw = match.group(1)
-                followers = self.parse_count(followers_raw)
-                print(f"Found followers via page content: {followers} ({followers_raw})")
-                return followers
-        except:
-            pass
-        
-        print(f"No follower count found for {username}")
-        return None
-        
-    except Exception as e:
-        print(f"Could not fetch follower count for {username}: {e}")
-        return None
+            
+            print(f"No follower count found for {username}")
+            return None
+            
+        except Exception as e:
+            print(f"Could not fetch follower count for {username}: {e}")
+            return None
