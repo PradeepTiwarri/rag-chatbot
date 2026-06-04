@@ -24,62 +24,54 @@ class InstagramPlaywrightExtractor:
 
     def extract(self, reel_url):
         """
-        Extract Instagram reel data using script tag JSON parsing.
-        This is more reliable than meta tag scraping.
+        Extract Instagram reel data using Playwright.
+        Follows the same reliable pattern as get_instagram_reel_data.
         """
         with sync_playwright() as p:
             context = p.chromium.launch_persistent_context(
-                user_data_dir="./instagram_profile",
+                user_data_dir="/app/instagram_profile",
                 headless=True,
                 args=['--disable-blink-features=AutomationControlled']
             )
             page = context.new_page()
 
             try:
+                # Step 1: Go to reel page
                 page.goto(reel_url, wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_timeout(5000)
+                page.wait_for_timeout(3000)
 
-                # Method 1: Extract from script tags (most reliable)
+                # Step 2: Get og:url to extract username (same as working function)
+                og_url = page.locator('meta[property="og:url"]').get_attribute("content", timeout=10000)
+                username = self._extract_username_from_url(og_url)
+                
+                # Step 3: Try to get likes/comments from script tag first
+                likes = 0
+                comments = 0
+                
                 scripts = page.locator("script").all()
-                target_script = None
-
                 for script in scripts:
                     try:
                         txt = script.text_content()
                         if txt and "xdt_api__v1__clips__home__connection_v2" in txt:
-                            target_script = txt
+                            like_count = self._extract_regex(r'"like_count":(\d+)', txt)
+                            comment_count = self._extract_regex(r'"comment_count":(\d+)', txt)
+                            if like_count:
+                                likes = int(like_count)
+                            if comment_count:
+                                comments = int(comment_count)
+                            print(f"Script extraction - likes: {likes}, comments: {comments}")
                             break
                     except:
                         pass
-
-                if target_script:
-                    # Extract data using regex patterns
-                    username = self._extract_regex(r'"username":"([^"]+)"', target_script)
-                    like_count = self._extract_regex(r'"like_count":(\d+)', target_script)
-                    comment_count = self._extract_regex(r'"comment_count":(\d+)', target_script)
-                    view_count = self._extract_regex(r'"view_count":(null|\d+)', target_script)
-                    
-                    # Handle view_count (can be "null")
-                    if view_count and view_count != "null":
-                        views = int(view_count)
-                    else:
-                        views = None
-                    
-                    likes = int(like_count) if like_count else 0
-                    comments = int(comment_count) if comment_count else 0
-                    
-                    print(f"Script extraction - username: {username}, likes: {likes}, comments: {comments}, views: {views}")
-                else:
-                    # Fallback to meta tag extraction
-                    print("Script tag not found, falling back to meta tags...")
-                    og_url = self._get_meta_content(page, 'meta[property="og:url"]')
-                    reel_desc = self._get_meta_content(page, 'meta[property="og:description"]')
-                    
-                    username = self._extract_username_from_url(og_url)
-                    likes, comments = self._extract_likes_comments_from_desc(reel_desc)
-                    views = None
-
-                # Get follower count from profile page
+                
+                # If script didn't work, try meta description
+                if likes == 0:
+                    reel_desc = page.locator('meta[property="og:description"]').get_attribute("content", timeout=10000)
+                    if reel_desc:
+                        likes, comments = self._extract_likes_comments_from_desc(reel_desc)
+                        print(f"Meta extraction - likes: {likes}, comments: {comments}")
+                
+                # Step 4: Get follower count from profile page (same reliable method)
                 followers = None
                 if username:
                     followers = self._get_follower_count(page, username)
@@ -90,7 +82,6 @@ class InstagramPlaywrightExtractor:
                     "follower_count": followers,
                     "likes": likes,
                     "comments": comments,
-                    "views": views,
                     "shares": None,
                 }
 
@@ -102,7 +93,6 @@ class InstagramPlaywrightExtractor:
                     "follower_count": None,
                     "likes": 0,
                     "comments": 0,
-                    "views": None,
                     "shares": None,
                 }
             finally:
@@ -114,15 +104,8 @@ class InstagramPlaywrightExtractor:
         match = re.search(pattern, text)
         return match.group(1) if match else None
 
-    def _get_meta_content(self, page, selector: str, timeout: int = 5000) -> str:
-        """Get meta tag content safely"""
-        try:
-            return page.locator(selector).get_attribute("content", timeout=timeout)
-        except Exception:
-            return None
-
     def _extract_username_from_url(self, og_url: str) -> str:
-        """Extract username from og:url"""
+        """Extract username from og:url - same as extract_username function"""
         if not og_url:
             return None
         match = re.search(r"instagram\.com/([^/]+)/reel", og_url, re.IGNORECASE)
@@ -147,10 +130,11 @@ class InstagramPlaywrightExtractor:
             profile_url = f"https://www.instagram.com/{username}/"
             print(f"Fetching profile for {username}...")
             
-            page.goto(profile_url, wait_until="domcontentloaded", timeout=30000)
+            # Same navigation as working function
+            page.goto(profile_url, wait_until="domcontentloaded", timeout=60000)
             page.wait_for_timeout(3000)
             
-            # Try script tag first (more reliable)
+            # Try script tag first (more reliable, gets exact number)
             scripts = page.locator("script").all()
             for script in scripts:
                 try:
@@ -165,15 +149,18 @@ class InstagramPlaywrightExtractor:
                 except:
                     pass
             
-            # Fallback to meta tag
-            description = page.locator('meta[property="og:description"]').get_attribute("content", timeout=5000)
+            # Fallback to meta tag (same pattern as extract_followers function)
+            description = page.locator('meta[property="og:description"]').get_attribute("content", timeout=10000)
             if description:
-                match = re.search(r'([\d.,]+[KMB]?)\s+Followers', description, re.I)
+                # Same pattern as extract_followers function
+                match = re.search(r'([0-9.,]+[KMB]?)\s+Followers', description, re.IGNORECASE)
                 if match:
-                    followers = self.parse_count(match.group(1))
-                    print(f"Found followers via meta: {followers}")
+                    followers_raw = match.group(1)
+                    followers = self.parse_count(followers_raw)
+                    print(f"Found followers via meta: {followers} ({followers_raw})")
                     return followers
             
+            print(f"No follower count found for {username}")
             return None
             
         except Exception as e:
