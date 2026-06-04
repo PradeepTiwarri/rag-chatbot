@@ -41,7 +41,7 @@ class InstagramPlaywrightExtractor:
                 page.wait_for_timeout(3000)
 
                 # Step 2: Get og:url to extract username
-                og_url = page.locator('meta[property="og:url"]').get_attribute("content", timeout=10000)
+                og_url = page.locator('meta[property="og:url"]').get_attribute("content")
                 username = self._extract_username_from_url(og_url)
                 
                 # Step 3: Try to get likes/comments from script tag first
@@ -154,12 +154,12 @@ class InstagramPlaywrightExtractor:
                     pass
             
             # Method 2: Wait for meta description with retry
-            for attempt in range(3):
+            for attempt in range(2):
                 try:
-                    description = page.locator('meta[property="og:description"]').get_attribute("content", timeout=10000)
+                    description = page.locator('meta[property="og:description"]').get_attribute("content")
                     if description:
                         # Try different patterns
-                        match = re.search(r'([\d.,]+[KMB]?)\s+Followers', description, re.I)
+                        match = re.search(r"([0-9.,]+[KMB]?)\s+Followers",description,re.IGNORECASE)
                         if not match:
                             match = re.search(r'([\d.,]+[KMB]?)\s+followers', description, re.I)
                         if match:
