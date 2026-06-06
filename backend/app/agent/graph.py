@@ -112,18 +112,53 @@ class RAGAgent:
             return "has_time"
         return "no_time"
     
+    def _get_video_duration(self, video_ids: List[str]) -> float:
+        """Fetch actual video duration from stored metadata"""
+        try:
+            from ..tools.metadata_tool import get_video_metadata
+            for video_id in video_ids:
+                metadata = get_video_metadata([video_id])
+                if video_id in metadata:
+                    duration = metadata[video_id].get('duration_seconds', 0)
+                    if duration and duration > 0:
+                        return float(duration)
+            return 0.0
+        except Exception as e:
+            print(f"Could not fetch video duration: {e}")
+            return 0.0
+    
     def extract_time_range(self, state: AgentState) -> AgentState:
-        """Extract time range from question using time_parser"""
-        video_duration = 300.0
+        """Extract time range from question using time_parser with actual video duration"""
         
-        time_range = time_parser.parse(state['question'], video_duration)
+        # Get actual video duration from metadata
+        video_duration = self._get_video_duration(state['video_ids'])
+        
+        # If no duration found, try to get from retrieved chunks or use a reasonable default
+        if video_duration <= 0 and state.get('retrieved_chunks'):
+            for chunk in state['retrieved_chunks']:
+                chunk_duration = chunk.get('duration', 0)
+                if chunk_duration > 0:
+                    video_duration = chunk_duration
+                    break
+        
+        # If still no duration, use 0 which will disable time-based filtering
+        if video_duration <= 0:
+            print("No video duration available, time-based queries may be inaccurate")
+            video_duration = 0
+        
+        time_range = time_parser.parse(state['question'], video_duration) if video_duration > 0 else None
         
         if time_range:
+            # Clamp to actual video duration
+            clamped_start = max(0, min(time_range.start, video_duration))
+            clamped_end = max(0, min(time_range.end, video_duration))
+            
             state['time_range'] = {
-                'start': time_range.start,
-                'end': time_range.end,
+                'start': clamped_start,
+                'end': clamped_end,
                 'fuzzy': time_range.fuzzy
             }
+            print(f"Time range: {clamped_start:.1f}-{clamped_end:.1f}s (video duration: {video_duration:.1f}s)")
         
         return state
     
@@ -164,7 +199,7 @@ class RAGAgent:
                 result['video_id'] = video_id
                 all_chunks.append(result)
         
-        all_chunks.sort(key=lambda x: x['score'], reverse=True)
+        all_chunks.sort(key=lambda x: x.get('score', 0), reverse=True)
         
         state['retrieved_chunks'] = all_chunks[:10]
         
@@ -180,7 +215,7 @@ class RAGAgent:
             state['next_action'] = 'poor'
             return state
         
-        top_score = chunks[0]['score'] if chunks else 0
+        top_score = chunks[0].get('score', 0) if chunks else 0
         
         if top_score > 0.7:
             state['retrieval_quality'] = 'good'
@@ -243,44 +278,85 @@ class RAGAgent:
         return state
     
     def generate_answer(self, state: AgentState) -> AgentState:
-        """Generate final answer with citations"""
+        """Generate final answer with citations - STRICTLY no hallucination"""
         
         context = ""
         citations = []
+        videos_with_content = set()
         
         if state.get('tool_results'):
             context = str(state['tool_results'])
         elif state.get('retrieved_chunks'):
             for idx, chunk in enumerate(state['retrieved_chunks'][:5]):
-                video_id = chunk['video_id']
+                video_id = chunk.get('video_id', 'Unknown')
                 start = chunk.get('start_time', 0)
                 end = chunk.get('end_time', 0)
                 text = chunk.get('text', '')
                 
-                context += f"\n[Video {video_id}, {start:.0f}-{end:.0f}s]: {text}\n"
-                
-                citations.append({
-                    'video_id': video_id,
-                    'timestamp': f"{start:.0f}-{end:.0f}s",
-                    'text': text[:200]
-                })
-        else:
-            context = "No relevant information found."
+                if text and len(text.strip()) > 10:
+                    context += f"\n[Video {video_id}, {start:.1f}-{end:.1f}s]: {text}\n"
+                    videos_with_content.add(video_id)
+                    
+                    citations.append({
+                        'video_id': video_id,
+                        'timestamp': f"{start:.1f}-{end:.1f}s",
+                        'text': text[:300]
+                    })
         
-        system_prompt = """You are a video analysis expert. Answer questions about video content, engagement metrics, and creator information.
+        # Get video durations for context
+        video_durations = {}
+        try:
+            from ..tools.metadata_tool import get_video_metadata
+            for video_id in state['video_ids']:
+                metadata = get_video_metadata([video_id])
+                if video_id in metadata:
+                    video_durations[video_id] = metadata[video_id].get('duration_seconds', 0)
+        except Exception as e:
+            print(f"Could not fetch durations: {e}")
+        
+        # Check which videos have no content
+        missing_videos = [vid for vid in state['video_ids'] if vid not in videos_with_content]
+        
+        if not context or len(context.strip()) < 50:
+            state['answer'] = "I don't have enough transcript data to answer this question. Please make sure videos have been ingested successfully."
+            state['citations'] = []
+            return state
+        
+        # Build duration info dynamically
+        duration_info = "\n".join([f"- Video {vid}: {duration:.1f} seconds long" for vid, duration in video_durations.items() if duration > 0])
+        
+        missing_video_note = ""
+        if missing_videos:
+            missing_video_note = f"\nNOTE: No transcript data available for Videos {', '.join(missing_videos)}. Only answer based on available videos."
+        
+        # STRICT system prompt to prevent hallucination
+        system_prompt = f"""You are a video analysis assistant. Your ONLY source of information is the context provided below.
 
-Always cite your sources using [Video A] or [Video B] with timestamps.
+VIDEO DURATIONS:
+{duration_info}
 
-If comparing videos, highlight differences clearly.
+CRITICAL RULES - VIOLATIONS WILL CAUSE INCORRECT ANSWERS:
+1. ONLY use information that appears EXPLICITLY in the context.
+2. If the context does not contain the answer, say "I cannot find that information in the video transcript."
+3. DO NOT invent, assume, or hallucinate any information not in the context.
+4. DO NOT use your general knowledge about any topics not explicitly mentioned in the context.
+5. ONLY cite timestamps that appear in the context exactly as shown.
+6. If the context has no information about a video, state that clearly.
+7. Timestamps beyond the video duration (see above) are impossible - do not use them.
+{missing_video_note}
 
-Be concise but informative."""
+You have access ONLY to these video transcripts. No other knowledge."""
 
-        user_prompt = f"""Context:
+        user_prompt = f"""CONTEXT (YOUR ONLY SOURCE OF TRUTH):
 {context}
 
-Question: {state['question']}
+QUESTION: {state['question']}
 
-Provide a clear answer with citations."""
+INSTRUCTIONS:
+- Answer ONLY using the context above.
+- If the context doesn't have the answer, say "The transcript does not contain that information."
+- Cite timestamps exactly as they appear in the context.
+- Be brief and factual."""
 
         try:
             response = groq_client.chat.completions.create(
@@ -289,7 +365,7 @@ Provide a clear answer with citations."""
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.3,
+                temperature=0.1,
                 max_tokens=500,
                 stream=False
             )
