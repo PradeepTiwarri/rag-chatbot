@@ -128,7 +128,7 @@ class RAGAgent:
         return state
     
     def retrieve_chunks(self, state: AgentState) -> AgentState:
-        """Retrieve relevant chunks from Pinecone"""
+        """Retrieve relevant chunks from Pinecone for ALL videos"""
         
         question = state['question']
         video_ids = state['video_ids']
@@ -138,34 +138,61 @@ class RAGAgent:
         
         all_chunks = []
         
+        print(f"Retrieving for videos: {video_ids}")
+        print(f"Time range: {time_range}")
+        
         for video_id in video_ids:
+            print(f"\n--- Querying video {video_id} ---")
+            
+            # Build filters for this video
             filters = {'video_id': video_id}
             
+            # Add time filters if present
             if time_range:
-                filters['start_time'] = {'$lt': time_range['end']}
-                filters['end_time'] = {'$gt': time_range['start']}
+                start = time_range.get('start', 0)
+                end = time_range.get('end', 300)
+                filters['start_time'] = {'$lt': end}
+                filters['end_time'] = {'$gt': start}
+                print(f"Time filter: start < {end}, end > {start}")
             
+            # Choose chunk level based on time range duration
             if time_range:
                 range_duration = time_range['end'] - time_range['start']
                 if range_duration <= 60:
                     filters['chunk_level'] = 'fine'
+                    print(f"Using fine chunks (range: {range_duration}s)")
                 elif range_duration <= 180:
                     filters['chunk_level'] = 'medium'
+                    print(f"Using medium chunks (range: {range_duration}s)")
                 else:
-                    filters['chunk_level'] = 'coarse'
+                    # Don't filter by chunk level for large ranges
+                    pass
             
+            # Query Pinecone
             results = pinecone_client.query(
                 query_embedding=question_embedding,
                 top_k=5,
                 filters=filters
             )
             
+            print(f"Found {len(results)} chunks for video {video_id}")
+            
+            # Add results with video_id
             for result in results:
+                # Ensure video_id is set correctly
                 result['video_id'] = video_id
+                # Also ensure metadata has video_id
+                if 'metadata' in result and result['metadata']:
+                    result['metadata']['video_id'] = video_id
                 all_chunks.append(result)
         
-        all_chunks.sort(key=lambda x: x['score'], reverse=True)
+        # Sort by score and limit
+        all_chunks.sort(key=lambda x: x.get('score', 0), reverse=True)
         state['retrieved_chunks'] = all_chunks[:10]
+        
+        print(f"\nTotal retrieved chunks: {len(state['retrieved_chunks'])}")
+        for idx, chunk in enumerate(state['retrieved_chunks'][:3]):
+            print(f"  {idx+1}. Video {chunk.get('video_id')} (score: {chunk.get('score', 0):.3f})")
         
         return state
     
@@ -247,16 +274,41 @@ class RAGAgent:
         context = ""
         citations = []
         
+        # DEBUG: Print what we have
+        print(f"\n=== GENERATE ANSWER ===")
+        print(f"Tool results: {bool(state.get('tool_results'))}")
+        print(f"Retrieved chunks: {len(state.get('retrieved_chunks', []))}")
+        
         if state.get('tool_results'):
             context = str(state['tool_results'])
+            print("Using tool results")
+            
         elif state.get('retrieved_chunks'):
+            print(f"Processing {len(state['retrieved_chunks'])} chunks")
+            
+            # Group chunks by video_id
+            chunks_by_video = {}
+            for chunk in state['retrieved_chunks']:
+                vid = chunk.get('video_id', 'unknown')
+                if vid not in chunks_by_video:
+                    chunks_by_video[vid] = []
+                chunks_by_video[vid].append(chunk)
+            
+            print(f"Chunks by video: {list(chunks_by_video.keys())}")
+            
+            # If only one video has chunks, add a note
+            if len(chunks_by_video) == 1 and len(state['video_ids']) > 1:
+                missing_video = [v for v in state['video_ids'] if v not in chunks_by_video]
+                context = f"NOTE: I could only find relevant content for Video {list(chunks_by_video.keys())[0]}. Video {missing_video[0]} had no matching content.\n\n"
+            
             for idx, chunk in enumerate(state['retrieved_chunks'][:5]):
-                video_id = chunk['video_id']
+                video_id = chunk.get('video_id', '?')
                 start = chunk.get('start_time', 0)
                 end = chunk.get('end_time', 0)
                 text = chunk.get('text', '')
+                score = chunk.get('score', 0)
                 
-                context += f"\n[Video {video_id}, {start:.0f}-{end:.0f}s]: {text}\n"
+                context += f"\n[Video {video_id}, {start:.0f}-{end:.0f}s] (score: {score:.2f}): {text}\n"
                 
                 citations.append({
                     'video_id': video_id,
@@ -264,22 +316,24 @@ class RAGAgent:
                     'text': text[:200]
                 })
         else:
-            context = "No relevant information found."
+            context = "No relevant information found in the video transcripts."
+            print("No chunks found!")
         
-        system_prompt = """You are a video analysis expert. Answer questions about video content, engagement metrics, and creator information.
+        system_prompt = """You are a video analysis expert analyzing TWO videos: Video A (YouTube) and Video B (Instagram).
 
-Always cite your sources using [Video A] or [Video B] with timestamps.
-
-If comparing videos, highlight differences clearly.
-
-Be concise but informative."""
+IMPORTANT RULES:
+1. ALWAYS mention BOTH videos in your answer, even if one has limited content.
+2. If you only have data for one video, explicitly say: "I only found content for Video X. Video Y had no matching content for this question."
+3. Cite sources using [Video A, timestamp] or [Video B, timestamp].
+4. Never say "only one video provided" unless both videos weren't ingested.
+5. If comparing, highlight differences clearly."""
 
         user_prompt = f"""Context:
 {context}
 
 Question: {state['question']}
 
-Provide a clear answer with citations."""
+Provide a clear answer with citations. If data for both videos is available, compare them. If only one video has relevant content, explain that clearly."""
 
         try:
             response = groq_client.chat.completions.create(
@@ -297,9 +351,12 @@ Provide a clear answer with citations."""
             state['answer'] = answer
             state['citations'] = citations
             
+            print(f"\nGenerated answer length: {len(answer)} chars")
+            
         except Exception as e:
             state['answer'] = f"Error generating answer: {str(e)}"
             state['error'] = str(e)
+            print(f"Error: {e}")
         
         return state
     
