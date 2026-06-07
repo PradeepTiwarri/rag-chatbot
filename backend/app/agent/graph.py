@@ -130,10 +130,8 @@ class RAGAgent:
     def extract_time_range(self, state: AgentState) -> AgentState:
         """Extract time range from question using time_parser with actual video duration"""
         
-        # Get actual video duration from metadata
         video_duration = self._get_video_duration(state['video_ids'])
         
-        # If no duration found, try to get from retrieved chunks or use a reasonable default
         if video_duration <= 0 and state.get('retrieved_chunks'):
             for chunk in state['retrieved_chunks']:
                 chunk_duration = chunk.get('duration', 0)
@@ -141,7 +139,6 @@ class RAGAgent:
                     video_duration = chunk_duration
                     break
         
-        # If still no duration, use 0 which will disable time-based filtering
         if video_duration <= 0:
             print("No video duration available, time-based queries may be inaccurate")
             video_duration = 0
@@ -149,7 +146,6 @@ class RAGAgent:
         time_range = time_parser.parse(state['question'], video_duration) if video_duration > 0 else None
         
         if time_range:
-            # Clamp to actual video duration
             clamped_start = max(0, min(time_range.start, video_duration))
             clamped_end = max(0, min(time_range.end, video_duration))
             
@@ -191,17 +187,37 @@ class RAGAgent:
             
             results = pinecone_client.query(
                 query_embedding=question_embedding,
-                top_k=5,
+                top_k=10,
                 filters=filters
             )
+            
+            print(f"Retrieved {len(results)} chunks for video {video_id}")
             
             for result in results:
                 result['video_id'] = video_id
                 all_chunks.append(result)
+            
+            if len(results) == 0:
+                print(f"No results for video {video_id}, trying fallback...")
+                fallback_results = pinecone_client.query(
+                    query_embedding=question_embedding,
+                    top_k=5,
+                    filters=None
+                )
+                for result in fallback_results:
+                    if result.get('video_id') == video_id:
+                        result['video_id'] = video_id
+                        all_chunks.append(result)
+                        print(f"Fallback: found chunk for video {video_id}")
         
         all_chunks.sort(key=lambda x: x.get('score', 0), reverse=True)
-        
         state['retrieved_chunks'] = all_chunks[:10]
+        
+        chunks_by_video = {}
+        for chunk in all_chunks:
+            vid = chunk.get('video_id', 'unknown')
+            chunks_by_video[vid] = chunks_by_video.get(vid, 0) + 1
+        print(f"Retrieval summary: {chunks_by_video}")
         
         return state
     
@@ -303,7 +319,6 @@ class RAGAgent:
                         'text': text[:300]
                     })
         
-        # Get video durations for context
         video_durations = {}
         try:
             from ..tools.metadata_tool import get_video_metadata
@@ -314,49 +329,43 @@ class RAGAgent:
         except Exception as e:
             print(f"Could not fetch durations: {e}")
         
-        # Check which videos have no content
         missing_videos = [vid for vid in state['video_ids'] if vid not in videos_with_content]
         
         if not context or len(context.strip()) < 50:
-            state['answer'] = "I don't have enough transcript data to answer this question. Please make sure videos have been ingested successfully."
+            if missing_videos:
+                state['answer'] = f"No transcript data available for Video {', '.join(missing_videos)}. The video may be too short or contain no speech."
+            else:
+                state['answer'] = "I don't have enough transcript data to answer this question."
             state['citations'] = []
             return state
         
-        # Build duration info dynamically
         duration_info = "\n".join([f"- Video {vid}: {duration:.1f} seconds long" for vid, duration in video_durations.items() if duration > 0])
         
         missing_video_note = ""
         if missing_videos:
             missing_video_note = f"\nNOTE: No transcript data available for Videos {', '.join(missing_videos)}. Only answer based on available videos."
         
-        # STRICT system prompt to prevent hallucination
         system_prompt = f"""You are a video analysis assistant. Your ONLY source of information is the context provided below.
 
 VIDEO DURATIONS:
 {duration_info}
 
-CRITICAL RULES - VIOLATIONS WILL CAUSE INCORRECT ANSWERS:
+CRITICAL RULES:
 1. ONLY use information that appears EXPLICITLY in the context.
 2. If the context does not contain the answer, say "I cannot find that information in the video transcript."
 3. DO NOT invent, assume, or hallucinate any information not in the context.
-4. DO NOT use your general knowledge about any topics not explicitly mentioned in the context.
-5. ONLY cite timestamps that appear in the context exactly as shown.
-6. If the context has no information about a video, state that clearly.
-7. Timestamps beyond the video duration (see above) are impossible - do not use them.
+4. ONLY cite timestamps that appear in the context exactly as shown.
+5. If the context has no information about a video, state that clearly.
 {missing_video_note}
 
 You have access ONLY to these video transcripts. No other knowledge."""
 
-        user_prompt = f"""CONTEXT (YOUR ONLY SOURCE OF TRUTH):
+        user_prompt = f"""CONTEXT:
 {context}
 
 QUESTION: {state['question']}
 
-INSTRUCTIONS:
-- Answer ONLY using the context above.
-- If the context doesn't have the answer, say "The transcript does not contain that information."
-- Cite timestamps exactly as they appear in the context.
-- Be brief and factual."""
+Answer using ONLY the context above. Cite timestamps exactly as they appear."""
 
         try:
             response = groq_client.chat.completions.create(
