@@ -1,7 +1,7 @@
 import json
 from typing import Dict, Any, List, Literal
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint import MemorySaver
 from groq import Groq
 
 from ..config import config
@@ -9,8 +9,9 @@ from ..ingestion.time_parser import time_parser, TimeRange
 from ..vector_store import pinecone_client
 from ..embedding import bge_embedder
 from .state import AgentState, get_initial_state
+from .graph import RAGAgent
 
-# Groq client
+#  Groq client
 groq_client = Groq(api_key=config.GROQ_API_KEY)
 
 class RAGAgent:
@@ -23,8 +24,10 @@ class RAGAgent:
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph state machine"""
         
+        # Create graph
         workflow = StateGraph(AgentState)
         
+        # nodes
         workflow.add_node("classify", self.classify_question)
         workflow.add_node("extract_time", self.extract_time_range)
         workflow.add_node("retrieve", self.retrieve_chunks)
@@ -33,8 +36,10 @@ class RAGAgent:
         workflow.add_node("use_tools", self.execute_tools)
         workflow.add_node("generate", self.generate_answer)
         
+        # entry point
         workflow.set_entry_point("classify")
         
+        # conditional edges
         workflow.add_conditional_edges(
             "classify",
             self.after_classify,
@@ -52,7 +57,7 @@ class RAGAgent:
             self.after_retrieve,
             {
                 "good": "generate",
-                "partial": "generate",
+                "partial": "generate",  #Generate but note limitation
                 "poor": "rewrite"
             }
         )
@@ -75,6 +80,7 @@ class RAGAgent:
         """Classify question type: time-based, tool-based, or RAG-based"""
         question = state['question'].lower()
         
+        # Check for tool-based questions
         tool_keywords = {
             'engagement_rate': ['engagement rate', 'engagement', 'likes', 'comments', 'views'],
             'metadata': ['creator', 'follower count', 'who is', 'upload date', 'hashtags']
@@ -88,6 +94,7 @@ class RAGAgent:
             needs_tool = True
             state['tool_calls'].append({'tool': 'metadata', 'params': {}})
         
+        # Check time-component
         time_keywords = ['second', 'seconds', 'minute', 'minutes', 'timestamp', 
                          'at ', 'around', 'about', 'first', 'last', 'opening', 
                          'intro', 'middle', 'outro', 'between']
@@ -112,49 +119,22 @@ class RAGAgent:
             return "has_time"
         return "no_time"
     
-    def _get_video_duration(self, video_ids: List[str]) -> float:
-        """Fetch actual video duration from stored metadata"""
-        try:
-            from ..tools.metadata_tool import get_video_metadata
-            for video_id in video_ids:
-                metadata = get_video_metadata([video_id])
-                if video_id in metadata:
-                    duration = metadata[video_id].get('duration_seconds', 0)
-                    if duration and duration > 0:
-                        return float(duration)
-            return 0.0
-        except Exception as e:
-            print(f"Could not fetch video duration: {e}")
-            return 0.0
-    
     def extract_time_range(self, state: AgentState) -> AgentState:
-        """Extract time range from question using time_parser with actual video duration"""
+        """Extract time range from question using time_parser"""
         
-        video_duration = self._get_video_duration(state['video_ids'])
+        # Need video duration to parse percentage-based queries
+        # For now, use default 300 seconds (5 min)
+        # In production, fetch from stored metadata
+        video_duration = 300.0  # Default
         
-        if video_duration <= 0 and state.get('retrieved_chunks'):
-            for chunk in state['retrieved_chunks']:
-                chunk_duration = chunk.get('duration', 0)
-                if chunk_duration > 0:
-                    video_duration = chunk_duration
-                    break
-        
-        if video_duration <= 0:
-            print("No video duration available, time-based queries may be inaccurate")
-            video_duration = 0
-        
-        time_range = time_parser.parse(state['question'], video_duration) if video_duration > 0 else None
+        time_range = time_parser.parse(state['question'], video_duration)
         
         if time_range:
-            clamped_start = max(0, min(time_range.start, video_duration))
-            clamped_end = max(0, min(time_range.end, video_duration))
-            
             state['time_range'] = {
-                'start': clamped_start,
-                'end': clamped_end,
+                'start': time_range.start,
+                'end': time_range.end,
                 'fuzzy': time_range.fuzzy
             }
-            print(f"Time range: {clamped_start:.1f}-{clamped_end:.1f}s (video duration: {video_duration:.1f}s)")
         
         return state
     
@@ -165,17 +145,21 @@ class RAGAgent:
         video_ids = state['video_ids']
         time_range = state.get('time_range')
         
+        # Generate embedding for question
         question_embedding = bge_embedder.embed_text(question)
         
         all_chunks = []
         
         for video_id in video_ids:
+            # Build filters
             filters = {'video_id': video_id}
             
+            # Add time filter if present
             if time_range:
                 filters['start_time'] = {'$lt': time_range['end']}
                 filters['end_time'] = {'$gt': time_range['start']}
             
+            # Determine chunk level based on time range
             if time_range:
                 range_duration = time_range['end'] - time_range['start']
                 if range_duration <= 60:
@@ -185,39 +169,21 @@ class RAGAgent:
                 else:
                     filters['chunk_level'] = 'coarse'
             
+            # Query Pinecone
             results = pinecone_client.query(
                 query_embedding=question_embedding,
-                top_k=10,
+                top_k=5,
                 filters=filters
             )
-            
-            print(f"Retrieved {len(results)} chunks for video {video_id}")
             
             for result in results:
                 result['video_id'] = video_id
                 all_chunks.append(result)
-            
-            if len(results) == 0:
-                print(f"No results for video {video_id}, trying fallback...")
-                fallback_results = pinecone_client.query(
-                    query_embedding=question_embedding,
-                    top_k=5,
-                    filters=None
-                )
-                for result in fallback_results:
-                    if result.get('video_id') == video_id:
-                        result['video_id'] = video_id
-                        all_chunks.append(result)
-                        print(f"Fallback: found chunk for video {video_id}")
         
-        all_chunks.sort(key=lambda x: x.get('score', 0), reverse=True)
-        state['retrieved_chunks'] = all_chunks[:10]
+        # Sort by score (relevance)
+        all_chunks.sort(key=lambda x: x['score'], reverse=True)
         
-        chunks_by_video = {}
-        for chunk in all_chunks:
-            vid = chunk.get('video_id', 'unknown')
-            chunks_by_video[vid] = chunks_by_video.get(vid, 0) + 1
-        print(f"Retrieval summary: {chunks_by_video}")
+        state['retrieved_chunks'] = all_chunks[:10]  # Keep top 10
         
         return state
     
@@ -225,13 +191,16 @@ class RAGAgent:
         """Grade quality of retrieved chunks"""
         
         chunks = state['retrieved_chunks']
+        question = state['question']
         
         if not chunks:
             state['retrieval_quality'] = 'poor'
             state['next_action'] = 'poor'
             return state
         
-        top_score = chunks[0].get('score', 0) if chunks else 0
+        # Check if chunks are relevant
+        # Use LLM to grade (simplified for now)
+        top_score = chunks[0]['score'] if chunks else 0
         
         if top_score > 0.7:
             state['retrieval_quality'] = 'good'
@@ -255,6 +224,7 @@ class RAGAgent:
             state['next_action'] = 'max_retries'
             return state
         
+        # Simple query expansion
         if 'time' in original_question.lower():
             rewritten = f"What content is discussed {original_question}"
         else:
@@ -294,92 +264,64 @@ class RAGAgent:
         return state
     
     def generate_answer(self, state: AgentState) -> AgentState:
-        """Generate final answer with citations - STRICTLY no hallucination"""
+        """Generate final answer with citations"""
         
+        # Prepare context
         context = ""
         citations = []
-        videos_with_content = set()
         
         if state.get('tool_results'):
+            # Use tool results directly
             context = str(state['tool_results'])
         elif state.get('retrieved_chunks'):
+            # Build context from retrieved chunks
             for idx, chunk in enumerate(state['retrieved_chunks'][:5]):
-                video_id = chunk.get('video_id', 'Unknown')
+                video_id = chunk['video_id']
                 start = chunk.get('start_time', 0)
                 end = chunk.get('end_time', 0)
                 text = chunk.get('text', '')
                 
-                if text and len(text.strip()) > 10:
-                    context += f"\n[Video {video_id}, {start:.1f}-{end:.1f}s]: {text}\n"
-                    videos_with_content.add(video_id)
-                    
-                    citations.append({
-                        'video_id': video_id,
-                        'timestamp': f"{start:.1f}-{end:.1f}s",
-                        'text': text[:300]
-                    })
+                context += f"\n[Video {video_id}, {start:.0f}-{end:.0f}s]: {text}\n"
+                
+                citations.append({
+                    'video_id': video_id,
+                    'timestamp': f"{start:.0f}-{end:.0f}s",
+                    'text': text[:200]
+                })
+        else:
+            context = "No relevant information found."
         
-        video_durations = {}
-        try:
-            from ..tools.metadata_tool import get_video_metadata
-            for video_id in state['video_ids']:
-                metadata = get_video_metadata([video_id])
-                if video_id in metadata:
-                    video_durations[video_id] = metadata[video_id].get('duration_seconds', 0)
-        except Exception as e:
-            print(f"Could not fetch durations: {e}")
-        
-        missing_videos = [vid for vid in state['video_ids'] if vid not in videos_with_content]
-        
-        if not context or len(context.strip()) < 50:
-            if missing_videos:
-                state['answer'] = f"No transcript data available for Video {', '.join(missing_videos)}. The video may be too short or contain no speech."
-            else:
-                state['answer'] = "I don't have enough transcript data to answer this question."
-            state['citations'] = []
-            return state
-        
-        duration_info = "\n".join([f"- Video {vid}: {duration:.1f} seconds long" for vid, duration in video_durations.items() if duration > 0])
-        
-        missing_video_note = ""
-        if missing_videos:
-            missing_video_note = f"\nNOTE: No transcript data available for Videos {', '.join(missing_videos)}. Only answer based on available videos."
-        
-        system_prompt = f"""You are a video analysis assistant. Your ONLY source of information is the context provided below.
+        # Build prompt
+        system_prompt = """You are a video analysis expert. Answer questions about video content, engagement metrics, and creator information.
 
-VIDEO DURATIONS:
-{duration_info}
+Always cite your sources using [Video A] or [Video B] with timestamps.
 
-CRITICAL RULES:
-1. ONLY use information that appears EXPLICITLY in the context.
-2. If the context does not contain the answer, say "I cannot find that information in the video transcript."
-3. DO NOT invent, assume, or hallucinate any information not in the context.
-4. ONLY cite timestamps that appear in the context exactly as shown.
-5. If the context has no information about a video, state that clearly.
-{missing_video_note}
+If comparing videos, highlight differences clearly.
 
-You have access ONLY to these video transcripts. No other knowledge."""
+Be concise but informative."""
 
-        user_prompt = f"""CONTEXT:
+        user_prompt = f"""Context:
 {context}
 
-QUESTION: {state['question']}
+Question: {state['question']}
 
-Answer using ONLY the context above. Cite timestamps exactly as they appear."""
+Provide a clear answer with citations."""
 
         try:
+            # Generate with Groq
             response = groq_client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.1,
+                temperature=0.3,
                 max_tokens=500,
                 stream=False
             )
             
             answer = response.choices[0].message.content
+            
             state['answer'] = answer
             state['citations'] = citations
             
@@ -403,4 +345,5 @@ Answer using ONLY the context above. Cite timestamps exactly as they appear."""
         }
 
 
+# Singleton instance
 rag_agent = RAGAgent()
