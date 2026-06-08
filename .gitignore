@@ -24,3 +24,7 @@ backend/venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Large files
+*.whl
+backend/dependencies/

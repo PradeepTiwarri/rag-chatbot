@@ -107,52 +107,49 @@ export default function VideoCard({ video }: VideoCardProps) {
 
       {/* Media */}
       {isYoutube ? (
-        <div className="frame-landscape">
-          <div>
-            {ytEmbed ? (
-              <iframe
-                src={ytEmbed}
-                className="w-full h-full"
-                frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            ) : (
-              <div className="thumb-strip w-full h-full">
-                {ytThumbs.map((src, i) => (
-                  <img key={i} src={src} alt={`Frame ${i + 1}`} className="w-full h-full object-cover" />
-                ))}
-              </div>
-            )}
-            {video.duration_seconds > 0 && (
-              <div
-                className="absolute bottom-2 right-2 text-white text-[11px] font-mono px-2 py-0.5 rounded z-10"
-                style={{ background: "rgba(0,0,0,0.72)" }}
-              >
-                {formatDuration(video.duration_seconds)}
-              </div>
-            )}
-          </div>
+        <div className="relative w-full overflow-hidden" style={{ height: 480, background: "#1a1a1a" }}>
+          {ytEmbed ? (
+            <iframe
+              src={ytEmbed}
+              className="w-full h-full"
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          ) : (
+            <div className="thumb-strip w-full h-full">
+              {ytThumbs.map((src, i) => (
+                <img key={i} src={src} alt={`Frame ${i + 1}`} className="w-full h-full object-cover" />
+              ))}
+            </div>
+          )}
+          {video.duration_seconds > 0 && (
+            <div
+              className="absolute bottom-2 right-2 text-white text-[11px] font-mono px-2 py-0.5 rounded z-10"
+              style={{ background: "rgba(0,0,0,0.72)" }}
+            >
+              {formatDuration(video.duration_seconds)}
+            </div>
+          )}
         </div>
       ) : (
         /* Instagram — use neutral bg, show embed or thumbnail or link fallback */
-        <div className="relative w-full overflow-hidden" style={{ background: "#F3F3F3" }}>
+        <div className="relative w-full overflow-hidden" style={{ height: 480, background: "#F3F3F3" }}>
           {igEmbed ? (
             <iframe
               src={igEmbed}
               className="w-full border-0"
-              style={{ minHeight: 480, height: 480 }}
+              style={{ height: "100%" }}
               scrolling="no"
               allowTransparency
               allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
             />
           ) : video.thumbnail && !thumbError ? (
-            <a href={video.url} target="_blank" rel="noopener noreferrer" className="block relative group">
+            <a href={video.url} target="_blank" rel="noopener noreferrer" className="block relative group h-full">
               <img
                 src={video.thumbnail}
                 alt={video.title || "Instagram Reel"}
-                className="w-full object-cover"
-                style={{ maxHeight: 400 }}
+                className="w-full h-full object-cover"
                 onError={() => setThumbError(true)}
               />
               <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -178,7 +175,7 @@ export default function VideoCard({ video }: VideoCardProps) {
               href={video.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex flex-col items-center justify-center gap-3 py-16 hover:bg-neutral-100 transition-colors"
+              className="flex flex-col items-center justify-center gap-3 h-full hover:bg-neutral-100 transition-colors"
             >
               <div
                 className="w-14 h-14 rounded-full flex items-center justify-center"

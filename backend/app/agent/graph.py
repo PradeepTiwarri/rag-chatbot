@@ -301,7 +301,7 @@ class RAGAgent:
                 missing_video = [v for v in state['video_ids'] if v not in chunks_by_video]
                 context = f"NOTE: I could only find relevant content for Video {list(chunks_by_video.keys())[0]}. Video {missing_video[0]} had no matching content.\n\n"
             
-            for idx, chunk in enumerate(state['retrieved_chunks'][:5]):
+            for idx, chunk in enumerate(state['retrieved_chunks']):
                 video_id = chunk.get('video_id', '?')
                 start = chunk.get('start_time', 0)
                 end = chunk.get('end_time', 0)

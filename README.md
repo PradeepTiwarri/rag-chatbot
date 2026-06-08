@@ -4,6 +4,19 @@ A production-ready RAG system that actually works with real-world messy data.
 
 ---
 
+## 💸 LLM Cost Reality Check (I Did the Math)
+
+Before picking a stack, I priced out what 60M tokens/day actually costs. The results surprised me:
+
+| LLM Provider | Price per 1M tokens | 60M tokens/day | Monthly (30 days) |
+|---|---|---|---|
+| Groq (free tier) | $0 | $0 | $0 (but 30 req/min limit) |
+| Groq (paid) | $0.30 | $18/day | $540/month |
+| Together.ai Llama-3.3 | $0.90 | $54/day | $1,620/month |
+| DeepInfra Llama-3-70B | $0.60 | $36/day | $1,080/month |
+| OpenAI GPT-4o-mini | $0.15 | $9/day | $270/month ← WAIT, THIS IS CHEAPER |
+
+Yeah. GPT-4o-mini is cheaper than most open-source hosted options. That was a fun discovery.
 
 ## 🏗️ Architecture Decisions (What I Actually Went With)
 
@@ -44,6 +57,13 @@ This is a full-stack RAG chatbot that compares YouTube videos and Instagram Reel
 **Try it yourself:** https://rag-chatbot-techsolv.vercel.app/
 
 **Watch the 5-min walkthrough:** https://youtu.be/4RKWg4hpWR8?si=IC_6UaTkKeFowrC2
+
+The Loom shows:
+
+- Ingestion working with real YouTube + Instagram URLs
+- Me trying to break it with prompt injection (spoiler: it holds up)
+- The self-correction loop in action
+- Cost breakdown for 1000 creators/day
 
 ---
 

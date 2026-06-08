@@ -1,14 +1,16 @@
-[0602/164849.538:INFO:CONSOLE:9] "
-%cStop! font-family:helvetica; font-size:20px; font-size:50px; font-weight:bold; color:red; -webkit-text-stroke:1px black;", source: https://static.cdninstagram.com/rsrc.php/v4ijWG4/yc/l/en_US-j/tm6CzihsUVX.js (9)
-[0602/164849.542:INFO:CONSOLE:9] "
-%cThis is a browser feature intended for developers. If someone told you to copy-paste something here to enable an Instagram feature or "hack" someone's account, it is a scam and will give them access to your Instagram account. font-family:helvetica; font-size:20px; ", source: https://static.cdninstagram.com/rsrc.php/v4ijWG4/yc/l/en_US-j/tm6CzihsUVX.js (9)
-[0602/164849.544:INFO:CONSOLE:9] "
-%cSee https://www.facebook.com/selfxss for more information. font-family:helvetica; font-size:20px; ", source: https://static.cdninstagram.com/rsrc.php/v4ijWG4/yc/l/en_US-j/tm6CzihsUVX.js (9)
-[0602/164849.545:INFO:CONSOLE:9] "
-%c ", source: https://static.cdninstagram.com/rsrc.php/v4ijWG4/yc/l/en_US-j/tm6CzihsUVX.js (9)
-[0602/164853.220:INFO:CONSOLE:79] "ErrorUtils caught an error:
-
-GraphQL operation responded with error 4630001: Invalid module param. (Operation: PolarisStoriesV3TrayContainerQuery)
- [Caught in: unexpected]
-
-Subsequent non-fatal errors won't be logged; see https://fburl.com/debugjs. [object Object]", source: https://static.cdninstagram.com/rsrc.php/v4/y1/r/HpW0Gs8KCz0.js (79)
+[0604/121246.920:INFO:CONSOLE:9] "
+%cStop! font-family:helvetica; font-size:20px; font-size:50px; font-weight:bold; color:red; -webkit-text-stroke:1px black;", source: https://static.cdninstagram.com/rsrc.php/v4izrN4/yg/l/en_US-j/51qibAUABY_oYfDQnsESIGTsaa6c_y1OvC4fHGZPlv6rcBg9OemlgFH9aUyD2ha4TaGa_18N7y_wflTU6h_74-8uMXEOkztNZ5ZrrCxjEFdRGjiFGHh9ozlMIwdlrqnGwEVA1zrNvhsc-ja18neY9AQkz5zOy2CP2-dlbHmKwAxDYX1zo3c4gClVAs0phhshD5-sc1gjFNzAs4wCuyxdkJx4O5NrpKzMGU-W7GsTMMsiJC02ez.js (9)
+[0604/121246.921:INFO:CONSOLE:9] "
+%cThis is a browser feature intended for developers. If someone told you to copy-paste something here to enable an Instagram feature or "hack" someone's account, it is a scam and will give them access to your Instagram account. font-family:helvetica; font-size:20px; ", source: https://static.cdninstagram.com/rsrc.php/v4izrN4/yg/l/en_US-j/51qibAUABY_oYfDQnsESIGTsaa6c_y1OvC4fHGZPlv6rcBg9OemlgFH9aUyD2ha4TaGa_18N7y_wflTU6h_74-8uMXEOkztNZ5ZrrCxjEFdRGjiFGHh9ozlMIwdlrqnGwEVA1zrNvhsc-ja18neY9AQkz5zOy2CP2-dlbHmKwAxDYX1zo3c4gClVAs0phhshD5-sc1gjFNzAs4wCuyxdkJx4O5NrpKzMGU-W7GsTMMsiJC02ez.js (9)
+[0604/121246.921:INFO:CONSOLE:9] "
+%cSee https://www.facebook.com/selfxss for more information. font-family:helvetica; font-size:20px; ", source: https://static.cdninstagram.com/rsrc.php/v4izrN4/yg/l/en_US-j/51qibAUABY_oYfDQnsESIGTsaa6c_y1OvC4fHGZPlv6rcBg9OemlgFH9aUyD2ha4TaGa_18N7y_wflTU6h_74-8uMXEOkztNZ5ZrrCxjEFdRGjiFGHh9ozlMIwdlrqnGwEVA1zrNvhsc-ja18neY9AQkz5zOy2CP2-dlbHmKwAxDYX1zo3c4gClVAs0phhshD5-sc1gjFNzAs4wCuyxdkJx4O5NrpKzMGU-W7GsTMMsiJC02ez.js (9)
+[0604/121246.921:INFO:CONSOLE:9] "
+%c ", source: https://static.cdninstagram.com/rsrc.php/v4izrN4/yg/l/en_US-j/51qibAUABY_oYfDQnsESIGTsaa6c_y1OvC4fHGZPlv6rcBg9OemlgFH9aUyD2ha4TaGa_18N7y_wflTU6h_74-8uMXEOkztNZ5ZrrCxjEFdRGjiFGHh9ozlMIwdlrqnGwEVA1zrNvhsc-ja18neY9AQkz5zOy2CP2-dlbHmKwAxDYX1zo3c4gClVAs0phhshD5-sc1gjFNzAs4wCuyxdkJx4O5NrpKzMGU-W7GsTMMsiJC02ez.js (9)
+[0604/121254.114:INFO:CONSOLE:813] "
+%cStop! font-family:helvetica; font-size:20px; font-size:50px; font-weight:bold; color:red; -webkit-text-stroke:1px black;", source: https://static.cdninstagram.com/rsrc.php/v4iyHG4/y7/l/en_US-j/5qnDdjZngZgCKKoD8n6EQBk6UMEzUZAO_qlATF0asnSL74rEVGFRAZEJ6IEyFARI6kEClUBsOECdz51qibAUABY_oYfDQnsESIGpnMMLVJszTDJKsPdhuZwnlTsaa6c_y1OvMHgcVJ4CCWK0FbROOjSCWM.js (813)
+[0604/121254.114:INFO:CONSOLE:813] "
+%cThis is a browser feature intended for developers. If someone told you to copy-paste something here to enable an Instagram feature or "hack" someone's account, it is a scam and will give them access to your Instagram account. font-family:helvetica; font-size:20px; ", source: https://static.cdninstagram.com/rsrc.php/v4iyHG4/y7/l/en_US-j/5qnDdjZngZgCKKoD8n6EQBk6UMEzUZAO_qlATF0asnSL74rEVGFRAZEJ6IEyFARI6kEClUBsOECdz51qibAUABY_oYfDQnsESIGpnMMLVJszTDJKsPdhuZwnlTsaa6c_y1OvMHgcVJ4CCWK0FbROOjSCWM.js (813)
+[0604/121254.114:INFO:CONSOLE:813] "
+%cSee https://www.facebook.com/selfxss for more information. font-family:helvetica; font-size:20px; ", source: https://static.cdninstagram.com/rsrc.php/v4iyHG4/y7/l/en_US-j/5qnDdjZngZgCKKoD8n6EQBk6UMEzUZAO_qlATF0asnSL74rEVGFRAZEJ6IEyFARI6kEClUBsOECdz51qibAUABY_oYfDQnsESIGpnMMLVJszTDJKsPdhuZwnlTsaa6c_y1OvMHgcVJ4CCWK0FbROOjSCWM.js (813)
+[0604/121254.114:INFO:CONSOLE:813] "
+%c ", source: https://static.cdninstagram.com/rsrc.php/v4iyHG4/y7/l/en_US-j/5qnDdjZngZgCKKoD8n6EQBk6UMEzUZAO_qlATF0asnSL74rEVGFRAZEJ6IEyFARI6kEClUBsOECdz51qibAUABY_oYfDQnsESIGpnMMLVJszTDJKsPdhuZwnlTsaa6c_y1OvMHgcVJ4CCWK0FbROOjSCWM.js (813)

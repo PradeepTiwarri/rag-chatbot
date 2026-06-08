@@ -1,3 +1,8 @@
-2026/06/02-16:37:48.660 7174 Reusing MANIFEST C:\Users\Pradeep Tiwari\OneDrive\Desktop\rag-chatbot\backend\instagram_profile\Default\Session Storage/MANIFEST-000001
-2026/06/02-16:37:48.662 7174 Recovering log #3
-2026/06/02-16:37:48.663 7174 Reusing old log C:\Users\Pradeep Tiwari\OneDrive\Desktop\rag-chatbot\backend\instagram_profile\Default\Session Storage/000003.log 
+2026/06/04-12:02:45.464 2f30 Reusing MANIFEST C:\Users\Pradeep Tiwari\OneDrive\Desktop\rag-chatbot\backend\instagram_profile\Default\Session Storage/MANIFEST-000001
+2026/06/04-12:02:45.465 2f30 Recovering log #3
+2026/06/04-12:02:45.466 2f30 Level-0 table #3: started
+2026/06/04-12:02:45.471 2f30 Level-0 table #3: 15678 bytes OK
+2026/06/04-12:02:45.472 2f30 Recovering log #4
+2026/06/04-12:02:45.472 2f30 Reusing old log C:\Users\Pradeep Tiwari\OneDrive\Desktop\rag-chatbot\backend\instagram_profile\Default\Session Storage/000004.log 
+2026/06/04-12:02:45.475 2f30 Delete type=0 #3
+2026/06/04-12:02:45.475 2f30 Delete type=2 #5
