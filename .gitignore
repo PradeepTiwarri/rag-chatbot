@@ -28,3 +28,6 @@ Thumbs.db
 # Large files
 *.whl
 backend/dependencies/
+
+# Auto-generated files
+backend/instagram_profile/
