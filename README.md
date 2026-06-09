@@ -469,30 +469,4 @@ My agent passed all of these. Yours should too.
 | RAGAS evaluation framework | Quantify "40% improvement" with real numbers | 1 day |
 | Rate limiting per user | Prevent API abuse | 1 day |
 
----
 
-## 🏆 Why This Stands Out
-
-Most RAG demos are "I watched a tutorial and copied the code." This project shows:
-
-- **I can handle real-world constraints** — Instagram killed view counts? I found a workaround.
-- **I understand production costs** — I can tell you exactly why OpenAI is overkill.
-- **I think about security** — Prompt injection testing is in the README.
-- **I document failures** — The "Honest Journey" section shows growth mindset.
-- **I ship working code** — Live demo + Loom + this README.
-
----
-
-## 📝 License
-
-MIT. Use it, break it, fix it, learn from it. Just give credit if you fork it.
-
----
-
-## 🙏 Acknowledgments
-
-- **LangGraph team** – For making self-correcting agents accessible to mortals
-- **Groq** – For the free LLM tier (seriously, thank you)
-- **Playwright** – For being the only tool that works for Instagram
-- **YouTube Transcript API** – For being free when I needed it
-- **My future internship interviewer** – For reading this far
