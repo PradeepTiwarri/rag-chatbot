@@ -17,6 +17,8 @@ Before picking a stack, I priced out what 60M tokens/day actually costs. The res
 | OpenAI GPT-4o-mini | $0.15 | $9/day | $270/month ← WAIT, THIS IS CHEAPER |
 
 Yeah. GPT-4o-mini is cheaper than most open-source hosted options. That was a fun discovery.
+---------------------------------------------------
+## 🏗️ Architecture Decisions (What I Actually Used)
 
 | Layer | Choice | Why |
 |---|---|---|
