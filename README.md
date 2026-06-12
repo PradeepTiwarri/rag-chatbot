@@ -18,19 +18,19 @@ Before picking a stack, I priced out what 60M tokens/day actually costs. The res
 
 Yeah. GPT-4o-mini is cheaper than most open-source hosted options. That was a fun discovery.
 
-## 🏗️ Architecture Decisions (What I Actually Went With)
+## 🏗️ Architecture Decisions (What I Actually Used)
 
 | Layer | Choice | Why |
-|---|---|---|
-| Orchestration | LangGraph | Still the best for self-correction |
-| Retrieval | LlamaIndex | Better chunking than raw LangChain |
-| Vector DB | Supabase pgvector + pgvector | One database for everything |
-| Embeddings | Voyage-2 | Best quality, but $0.10/1M tokens (2x OpenAI) |
-| LLM | GPT-4o-mini | Cheapest + highest quality |
-| Reranking | Cohere Rerank 3 | Adds 10-15% retrieval accuracy, $0.10/1k queries |
-| Instagram Views | Accept estimation | Literally no API works |
-| Caching | Upstash Redis | $0 for demo, $5-10 for production |
+|-------|--------|-----|
+| Vector DB | Pinecone (free tier) | 2GB free. Enough for demo. |
+| Embeddings | BGE-large (local) | $0. OpenAI would cost $40/month. |
+| LLM | Groq Llama-3-70B (free) | 200+ tokens/sec. Rate limits fine for demo. |
 
+**Note:** The "Supabase + Voyage-2" table was my research/preference for production.
+This demo uses the $0 stack above. For production at 1000 creators/day, I'd switch to:
+- Supabase pgvector ($25/month)
+- GPT-4o-mini ($270/month)
+- OpenAI embeddings ($40/month)
 ---
 
 ## What This Is (And What It Isn't)
