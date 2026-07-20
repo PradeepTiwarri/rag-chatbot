@@ -1,5 +1,4 @@
 "use client";
-//import { API_BASE_URL } from "../config";
 
 import { useState } from "react";
 import { IngestResponse, VideoMetadata } from "../types";
@@ -41,7 +40,8 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
     setPipelineStep("transcripts");
 
     try {
-      const response = await fetch(`/api/ingest`, {
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${API_BASE}/api/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -60,7 +60,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
         data.A.status === "success" &&
         data.B.status === "success" &&
         data.A.metadata &&
-        data.B.metadata      
+        data.B.metadata
       ) {
         setPipelineStep("done");
         setTimeout(() => {
@@ -69,7 +69,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
       } else {
         const errorMsg =
           data.A.error || data.B.error || "Unknown error during ingestion";
-        console.log(`Ingestion error: ${errorMsg}`);
+        alert(`Ingestion error: ${errorMsg}`);
         setPipelineStep("idle");
       }
     } catch (error) {
@@ -106,10 +106,10 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start pt-16 page-bg relative">
+    <div className="min-h-screen flex flex-col items-center justify-start pt-16 page-bg relative overflow-x-hidden">
       {/* Top Nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-surface-200">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-3">
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 py-3">
           <div className="flex items-center gap-1">
             <span className="font-display font-extrabold text-lg text-surface-900">
               RAG
@@ -118,7 +118,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
               {" "}Video Analyst
             </span>
           </div>
-          <div className="flex items-center gap-8">
+          <div className="hidden sm:flex items-center gap-6 lg:gap-8">
             <a className="text-sm font-medium text-surface-900 hover:text-accent-600 transition-colors cursor-pointer">
               Dashboard
             </a>
@@ -148,14 +148,14 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
       </nav>
 
       {/* Hero Title */}
-      <div className="mt-8 mb-10 text-center fade-in-up relative z-10">
-        <h1 className="text-4xl md:text-5xl font-display font-extrabold text-surface-900 tracking-tight">
+      <div className="mt-6 sm:mt-8 mb-6 sm:mb-10 text-center fade-in-up relative z-10 px-4">
+        <h1 className="text-2xl sm:text-4xl md:text-5xl font-display font-extrabold text-surface-900 tracking-tight">
           Ingest Analysis Pipeline
         </h1>
       </div>
 
       {/* Input Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl px-4 mb-8 fade-in-up relative z-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 w-full max-w-4xl px-4 mb-6 sm:mb-8 fade-in-up relative z-10">
         {/* YouTube Card */}
         <div className="bg-white rounded-2xl border border-surface-200 shadow-card p-6 card-lift">
           <div className="flex items-center gap-3 mb-3">
@@ -191,11 +191,10 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
           </p>
           <button
             onClick={validateYoutube}
-            className={`mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-              ytValidated
-                ? "border-green-300 bg-green-50 text-green-700"
-                : "border-surface-300 bg-white text-surface-700 hover:border-accent-300 hover:bg-accent-50"
-            }`}
+            className={`mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-medium transition-all ${ytValidated
+              ? "border-green-300 bg-green-50 text-green-700"
+              : "border-surface-300 bg-white text-surface-700 hover:border-accent-300 hover:bg-accent-50"
+              }`}
           >
             <ShieldCheck className="w-4 h-4" />
             {ytValidated ? "Validated ✓" : "Validate Link"}
@@ -239,11 +238,10 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
           </p>
           <button
             onClick={validateInstagram}
-            className={`mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-              igValidated
-                ? "border-green-300 bg-green-50 text-green-700"
-                : "border-surface-300 bg-white text-surface-700 hover:border-accent-300 hover:bg-accent-50"
-            }`}
+            className={`mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-medium transition-all ${igValidated
+              ? "border-green-300 bg-green-50 text-green-700"
+              : "border-surface-300 bg-white text-surface-700 hover:border-accent-300 hover:bg-accent-50"
+              }`}
           >
             <ShieldCheck className="w-4 h-4" />
             {igValidated ? "Validated ✓" : "Validate Link"}
@@ -252,7 +250,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
       </div>
 
       {/* Analyze Button */}
-      <div className="w-full max-w-xl px-4 mb-6 fade-in-up relative z-10">
+      <div className="w-full max-w-xl px-4 mb-4 sm:mb-6 fade-in-up relative z-10">
         <button
           onClick={handleIngest}
           disabled={isLoading}
@@ -264,8 +262,8 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
 
       {/* Pipeline Progress */}
       {pipelineStep !== "idle" && (
-        <div className="bg-white rounded-2xl border border-surface-200 shadow-card px-8 py-5 max-w-xl w-full mx-4 fade-in-up relative z-10">
-          <div className="flex items-center justify-center gap-3 flex-wrap">
+        <div className="bg-white rounded-2xl border border-surface-200 shadow-card px-4 sm:px-8 py-5 max-w-xl w-full mx-4 fade-in-up relative z-10">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 flex-wrap">
             {/* Step 1 */}
             <div className="flex items-center gap-1.5">
               {stepIcon("transcripts", pipelineStep)}
@@ -273,9 +271,8 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
                 Fetching Transcripts
               </span>
             </div>
-            <div className={`step-line ${
-              pipelineStep === "embeddings" || pipelineStep === "storage" || pipelineStep === "done" ? "active" : ""
-            }`} />
+            <div className={`step-line ${pipelineStep === "embeddings" || pipelineStep === "storage" || pipelineStep === "done" ? "active" : ""
+              }`} />
             {/* Step 2 */}
             <div className="flex items-center gap-1.5">
               {stepIcon("embeddings", pipelineStep)}
@@ -283,9 +280,8 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
                 Generating Embeddings
               </span>
             </div>
-            <div className={`step-line ${
-              pipelineStep === "storage" || pipelineStep === "done" ? "active" : ""
-            }`} />
+            <div className={`step-line ${pipelineStep === "storage" || pipelineStep === "done" ? "active" : ""
+              }`} />
             {/* Step 3 */}
             <div className="flex items-center gap-1.5">
               {stepIcon("storage", pipelineStep)}

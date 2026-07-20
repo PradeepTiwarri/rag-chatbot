@@ -11,6 +11,10 @@ interface ChatPanelProps {
   videoIds: string[];
 }
 
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:8000";
+
 export default function ChatPanel({ videoIds }: ChatPanelProps) {
   const {
     messages,
@@ -19,9 +23,8 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
     handleSubmit,
     isLoading,
     setInput,
-    error,
   } = useChat({
-    api: `/api/chat`,
+    api: `${API_URL}/api/chat`,
     body: { video_ids: videoIds },
     onError: (error) => {
       console.error("Chat error:", error);
@@ -35,7 +38,7 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Parse citations from message content (citations are now embedded in the text)
+  // Parse citations from message content
   const parseCitations = (
     content: string
   ): { text: string; citations: Citation[] } => {
@@ -58,14 +61,14 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
 
   const handleQuickAction = (question: string) => {
     setInput(question);
-    const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+    const fakeEvent = { preventDefault: () => { } } as React.FormEvent;
     handleSubmit(fakeEvent);
   };
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-2xl border border-surface-200 shadow-card overflow-hidden">
+    <div className="flex flex-col h-full bg-white rounded-2xl border border-surface-200 shadow-card overflow-hidden min-w-0">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-surface-200 flex items-center justify-between">
+      <div className="px-3 sm:px-5 py-3 sm:py-4 border-b border-surface-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center">
             <svg
@@ -104,15 +107,8 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
         </div>
       </div>
 
-      {/* Error Message */}
-      {error && (
-        <div className="mx-5 mt-2 p-2 bg-red-50 border border-red-200 rounded-lg text-red-600 text-xs">
-          Chat error: {error.message}
-        </div>
-      )}
-
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-3 sm:py-4 space-y-4">
         {messages.length === 0 && (
           <div className="text-center text-surface-400 mt-12">
             <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-accent-50 flex items-center justify-center">
@@ -147,9 +143,8 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
           return (
             <div
               key={message.id}
-              className={`flex gap-3 ${
-                message.role === "user" ? "justify-end" : "justify-start"
-              }`}
+              className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"
+                }`}
             >
               {message.role === "assistant" && (
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center flex-shrink-0 mt-1">
@@ -172,11 +167,10 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
               )}
 
               <div
-                className={`max-w-[75%] rounded-2xl px-4 py-3 ${
-                  message.role === "user"
+                className={`max-w-[90%] sm:max-w-[75%] rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 ${message.role === "user"
                     ? "bg-accent-50 border border-accent-100 text-surface-800"
                     : "bg-surface-100 border border-surface-200 text-surface-800"
-                }`}
+                  }`}
               >
                 <p className="text-sm whitespace-pre-wrap leading-relaxed">
                   {text}
@@ -237,12 +231,12 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
       </div>
 
       {/* Quick Actions */}
-      <div className="px-5 pt-3 border-t border-surface-200">
+      <div className="px-3 sm:px-5 pt-3 border-t border-surface-200">
         <QuickActions onActionClick={handleQuickAction} />
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="px-5 pb-4">
+      <form onSubmit={handleSubmit} className="px-3 sm:px-5 pb-3 sm:pb-4">
         <div className="flex items-center gap-2 bg-surface-100 border border-surface-200 rounded-2xl px-4 py-2 focus-within:ring-2 focus-within:ring-accent-200 focus-within:border-accent-400 transition-all">
           <input
             type="text"

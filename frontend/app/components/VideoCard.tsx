@@ -107,11 +107,11 @@ export default function VideoCard({ video }: VideoCardProps) {
 
       {/* Media */}
       {isYoutube ? (
-        <div className="relative w-full overflow-hidden" style={{ height: 480, background: "#1a1a1a" }}>
+        <div className="relative w-full overflow-hidden aspect-video" style={{ background: "#1a1a1a" }}>
           {ytEmbed ? (
             <iframe
               src={ytEmbed}
-              className="w-full h-full"
+              className="absolute inset-0 w-full h-full"
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
@@ -134,7 +134,7 @@ export default function VideoCard({ video }: VideoCardProps) {
         </div>
       ) : (
         /* Instagram — use neutral bg, show embed or thumbnail or link fallback */
-        <div className="relative w-full overflow-hidden" style={{ height: 480, background: "#F3F3F3" }}>
+        <div className="relative w-full overflow-hidden" style={{ background: "#F3F3F3", aspectRatio: "9/16", maxHeight: "480px" }}>
           {igEmbed ? (
             <iframe
               src={igEmbed}
@@ -192,7 +192,7 @@ export default function VideoCard({ video }: VideoCardProps) {
       )}
 
       {/* Metrics */}
-      <div className="grid grid-cols-4 border-t" style={{ borderColor: "#E0E0E0" }}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 border-t" style={{ borderColor: "#E0E0E0" }}>
         {metrics.map((m, idx) => (
           <div
             key={m.label}
@@ -210,7 +210,7 @@ export default function VideoCard({ video }: VideoCardProps) {
       </div>
 
       {/* Creator */}
-      <div className="px-5 py-3 border-t flex items-center justify-between" style={{ borderColor: "#E0E0E0" }}>
+      <div className="px-4 sm:px-5 py-3 border-t flex flex-col sm:flex-row sm:items-center justify-between gap-2" style={{ borderColor: "#E0E0E0" }}>
         <div className="flex items-center gap-2.5">
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white"

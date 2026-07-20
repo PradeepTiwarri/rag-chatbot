@@ -197,3 +197,13 @@
   height: 100%;
   object-fit: cover;
 }
+
+/* ── Responsive: Mobile adjustments ────────────── */
+@media (max-width: 639px) {
+  .step-line {
+    display: none;
+  }
+  .status-loaded {
+    display: none;
+  }
+}
