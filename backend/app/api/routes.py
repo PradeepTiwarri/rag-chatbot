@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import asyncio
 import json
+import re
 import os
 
 from ..config import config
@@ -235,35 +236,90 @@ async def ingest_videos(request: IngestRequest):
         
         transcript_fetcher = TranscriptFetcher()
         
-        # Get metadata
+        # Step 1: Always try Playwright first for engagement data
+        playwright_data = None
         try:
             from ..ingestion.instagram_playwright import InstagramPlaywrightExtractor
             pw = InstagramPlaywrightExtractor()
             playwright_data = await asyncio.to_thread(pw.extract, request.instagram_url)
-            print("Playwright data obtained")
-            
-            instagram_extractor = InstagramExtractor()
-            instagram_metadata = instagram_extractor.extract_metadata(request.instagram_url, "instagram")
-            
-            instagram_metadata.update({
-                "creator": playwright_data.get("creator"),
-                "follower_count": playwright_data.get("follower_count"),
-                "likes": playwright_data.get("likes", instagram_metadata.get("likes", 0)),
-                "comments": playwright_data.get("comments", instagram_metadata.get("comments", 0)),
-            })
-            
-            final_likes = instagram_metadata.get("likes") or 0
-            final_comments = instagram_metadata.get("comments") or 0
-            if final_likes > 0:
-                estimated_views = (final_likes * 14) + (final_comments * 300)
-                instagram_metadata["views"] = estimated_views
-                instagram_metadata["engagement_rate"] = ((final_likes + final_comments) / estimated_views * 100)
-                print(f"Views estimated: {estimated_views:,}")
-                
+            print(f"Playwright data: creator={playwright_data.get('creator')}, "
+                  f"likes={playwright_data.get('likes')}, comments={playwright_data.get('comments')}")
         except Exception as pw_error:
-            print(f"Playwright failed: {pw_error}")
+            print(f"Playwright extraction failed: {pw_error}")
+        
+        # Step 2: Try yt-dlp for full metadata (may fail due to auth)
+        instagram_metadata = None
+        try:
             instagram_extractor = InstagramExtractor()
             instagram_metadata = instagram_extractor.extract_metadata(request.instagram_url, "instagram")
+            print("yt-dlp extraction succeeded")
+        except Exception as ytdlp_error:
+            print(f"yt-dlp Instagram failed (auth issue): {ytdlp_error}")
+        
+        # Step 3: Build final metadata from best available source
+        if instagram_metadata:
+            # yt-dlp worked — enrich with Playwright data where yt-dlp is missing
+            if playwright_data:
+                if playwright_data.get("creator"):
+                    instagram_metadata["creator"] = playwright_data["creator"]
+                if playwright_data.get("follower_count"):
+                    instagram_metadata["follower_count"] = playwright_data["follower_count"]
+                if playwright_data.get("likes", 0) > instagram_metadata.get("likes", 0):
+                    instagram_metadata["likes"] = playwright_data["likes"]
+                if playwright_data.get("comments", 0) > instagram_metadata.get("comments", 0):
+                    instagram_metadata["comments"] = playwright_data["comments"]
+                if playwright_data.get("views"):
+                    instagram_metadata["views"] = playwright_data["views"]
+        elif playwright_data:
+            # yt-dlp failed but Playwright got data — build synthetic metadata
+            print("Building metadata from Playwright data (yt-dlp unavailable)")
+            pw_likes = playwright_data.get("likes", 0) or 0
+            pw_comments = playwright_data.get("comments", 0) or 0
+            pw_views = playwright_data.get("views")
+            
+            # Estimate views if not available
+            if not pw_views and pw_likes > 0:
+                pw_views = (pw_likes * 14) + (pw_comments * 300)
+            elif not pw_views:
+                pw_views = 500
+            
+            engagement_rate = ((pw_likes + pw_comments) / pw_views * 100) if pw_views > 0 else 0
+            
+            # Extract reel ID from URL for hashtag/description fallback
+            reel_id_match = re.search(r'/reel/([^/?]+)', request.instagram_url)
+            reel_id = reel_id_match.group(1) if reel_id_match else "unknown"
+            
+            instagram_metadata = {
+                'video_id': None,
+                'platform': 'instagram',
+                'url': request.instagram_url,
+                'creator': playwright_data.get("creator", "Unknown"),
+                'creator_id': playwright_data.get("creator_id"),
+                'follower_count': playwright_data.get("follower_count"),
+                'title': f"Instagram Reel by @{playwright_data.get('creator', 'Unknown')}",
+                'views': pw_views,
+                'likes': pw_likes,
+                'comments': pw_comments,
+                'engagement_rate': engagement_rate,
+                'upload_date': None,
+                'duration_seconds': 0,
+                'hashtags': [],
+                'thumbnail': '',
+                'video_url': request.instagram_url,
+                'description': '',
+            }
+        else:
+            # Both failed completely
+            raise Exception("Both Playwright and yt-dlp failed to extract Instagram metadata")
+        
+        # Recalculate engagement if we have updated likes/comments
+        final_likes = instagram_metadata.get("likes") or 0
+        final_comments = instagram_metadata.get("comments") or 0
+        if final_likes > 0:
+            estimated_views = instagram_metadata.get("views") or (final_likes * 14) + (final_comments * 300)
+            instagram_metadata["views"] = estimated_views
+            instagram_metadata["engagement_rate"] = ((final_likes + final_comments) / estimated_views * 100)
+            print(f"Final views: {estimated_views:,}, engagement: {instagram_metadata['engagement_rate']:.1f}%")
         
         instagram_metadata["video_id"] = request.video_id_b
         

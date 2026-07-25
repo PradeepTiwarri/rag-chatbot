@@ -25,7 +25,8 @@ class InstagramPlaywrightExtractor:
     def extract(self, reel_url):
         """
         Extract Instagram reel data using Playwright.
-        Follows the same reliable pattern as get_instagram_reel_data.
+        Each step is wrapped individually so partial data is still returned
+        even when some steps fail (e.g. og:url timeout on server IPs).
         """
         with sync_playwright() as p:
             context = p.chromium.launch_persistent_context(
@@ -35,69 +36,115 @@ class InstagramPlaywrightExtractor:
             )
             page = context.new_page()
 
+            # Initialise with safe defaults
+            username = None
+            likes = 0
+            comments = 0
+            views = None
+            followers = None
+
             try:
                 # Step 1: Go to reel page
                 page.goto(reel_url, wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(5000)
 
-                # Step 2: Get og:url to extract username
-                og_url = page.locator('meta[property="og:url"]').get_attribute("content")
-                username = self._extract_username_from_url(og_url)
-                
-                # Step 3: Try to get likes/comments from script tag first
-                likes = 0
-                comments = 0
-                
-                scripts = page.locator("script").all()
-                for script in scripts:
-                    try:
-                        txt = script.text_content()
-                        if txt and "xdt_api__v1__clips__home__connection_v2" in txt:
-                            like_count = self._extract_regex(r'"like_count":(\d+)', txt)
-                            comment_count = self._extract_regex(r'"comment_count":(\d+)', txt)
-                            if like_count:
-                                likes = int(like_count)
-                            if comment_count:
-                                comments = int(comment_count)
-                            print(f"Script extraction - likes: {likes}, comments: {comments}")
-                            break
-                    except:
-                        pass
-                
-                # If script didn't work, try meta description
+                # Step 2: Extract username — try og:url first, then fall back to the input URL
+                try:
+                    og_url = page.locator('meta[property="og:url"]').get_attribute("content", timeout=10000)
+                    username = self._extract_username_from_url(og_url)
+                except Exception as e:
+                    print(f"og:url extraction failed (expected on server): {e}")
+
+                if not username:
+                    # Fallback: parse username from the reel URL itself
+                    username = self._extract_username_from_url(reel_url)
+                    # Also try /reel/ pattern variant (instagram.com/reel/XYZ doesn't have username)
+                    if not username:
+                        match = re.search(r"instagram\.com/([^/]+)/reel", reel_url, re.IGNORECASE)
+                        if match:
+                            username = match.group(1)
+                    print(f"Username from URL fallback: {username}")
+
+                # Step 3: Try script tag extraction (most reliable for engagement data)
+                try:
+                    scripts = page.locator("script").all()
+                    for script in scripts:
+                        try:
+                            txt = script.text_content()
+                            if not txt:
+                                continue
+
+                            # Primary: clips API data
+                            if "xdt_api__v1__clips__home__connection_v2" in txt:
+                                like_count = self._extract_regex(r'"like_count":(\d+)', txt)
+                                comment_count = self._extract_regex(r'"comment_count":(\d+)', txt)
+                                view_count = self._extract_regex(r'"view_count":(\d+)', txt)
+                                extracted_user = self._extract_regex(r'"username":"([^"]+)"', txt)
+                                if like_count:
+                                    likes = int(like_count)
+                                if comment_count:
+                                    comments = int(comment_count)
+                                if view_count:
+                                    views = int(view_count)
+                                if extracted_user and not username:
+                                    username = extracted_user
+                                print(f"Script extraction - user: {extracted_user}, likes: {likes}, comments: {comments}, views: {views}")
+                                break
+
+                            # Secondary: look for any media JSON with counts
+                            if '"like_count"' in txt and '"comment_count"' in txt:
+                                like_count = self._extract_regex(r'"like_count":(\d+)', txt)
+                                comment_count = self._extract_regex(r'"comment_count":(\d+)', txt)
+                                if like_count:
+                                    likes = int(like_count)
+                                if comment_count:
+                                    comments = int(comment_count)
+                                print(f"Alt script extraction - likes: {likes}, comments: {comments}")
+                                break
+                        except:
+                            pass
+                except Exception as e:
+                    print(f"Script tag scanning failed: {e}")
+
+                # Step 4: If script didn't yield likes, try meta description
                 if likes == 0:
-                    reel_desc = page.locator('meta[property="og:description"]').get_attribute("content", timeout=10000)
-                    if reel_desc:
-                        likes, comments = self._extract_likes_comments_from_desc(reel_desc)
-                        print(f"Meta extraction - likes: {likes}, comments: {comments}")
-                
-                # Step 4: Get follower count from profile page
-                followers = None
-                if username:
-                    followers = self._get_follower_count(page, username)
+                    try:
+                        reel_desc = page.locator('meta[property="og:description"]').get_attribute("content", timeout=8000)
+                        if reel_desc:
+                            likes, comments = self._extract_likes_comments_from_desc(reel_desc)
+                            print(f"Meta extraction - likes: {likes}, comments: {comments}")
+                    except Exception as e:
+                        print(f"Meta description extraction failed: {e}")
 
-                return {
-                    "creator": username,
-                    "creator_id": username,
-                    "follower_count": followers,
-                    "likes": likes,
-                    "comments": comments,
-                    "shares": None,
-                }
+                # Step 5: Get follower count from profile page
+                if username:
+                    try:
+                        followers = self._get_follower_count(page, username)
+                    except Exception as e:
+                        print(f"Follower count extraction failed: {e}")
 
             except Exception as e:
-                print(f"Playwright extraction failed: {e}")
-                return {
-                    "creator": None,
-                    "creator_id": None,
-                    "follower_count": None,
-                    "likes": 0,
-                    "comments": 0,
-                    "shares": None,
-                }
+                print(f"Playwright page load failed: {e}")
+
             finally:
-                page.close()
-                context.close()
+                try:
+                    page.close()
+                except:
+                    pass
+                try:
+                    context.close()
+                except:
+                    pass
+
+            return {
+                "creator": username,
+                "creator_id": username,
+                "follower_count": followers,
+                "likes": likes,
+                "comments": comments,
+                "views": views,
+                "shares": None,
+            }
 
     def _extract_regex(self, pattern: str, text: str) -> str:
         """Extract first matching group from text using regex"""
