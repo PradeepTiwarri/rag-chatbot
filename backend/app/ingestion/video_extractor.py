@@ -146,12 +146,15 @@ class VideoExtractor:
 class InstagramExtractor(VideoExtractor):
     """Specialized extractor for Instagram Reels with follower count from profile"""
 
+   class InstagramExtractor(VideoExtractor):
+    """Specialized extractor for Instagram Reels with follower count from profile"""
+
     def extract_metadata(self, url: str, platform: str = "instagram") -> Dict[str, Any]:
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
-            'cookiefile': os.getenv('YTDLP_COOKIES_FILE', 'youtube_cookies.txt'),
+            'cookiefile': '/app/youtube_cookies.txt',  # Hardcoded absolute path
             'js_runtimes': {'deno': {'path': '/root/.deno/bin/deno'}},
             'remote_components': ['ejs:github'],
         }
