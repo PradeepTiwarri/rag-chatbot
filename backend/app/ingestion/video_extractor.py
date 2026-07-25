@@ -7,15 +7,15 @@ class VideoExtractor:
     """Extract metadata from YouTube and Instagram Reels using yt-dlp"""
 
     def __init__(self, youtube_api_key: str = None):
-        self.ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': False,
-            'cookiefile': os.getenv('YTDLP_COOKIES_FILE', 'youtube_cookies.txt'),
-            'js_runtimes': {'deno': {'path': '/root/.deno/bin/deno'}},
-            'remote_components': ['ejs:github'],
-        }
-        self.youtube_api_key = youtube_api_key
+    self.ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': False,
+        'cookiefile': '/app/youtube_cookies.txt',  # Hardcoded absolute path
+        'js_runtimes': {'deno': {'path': '/root/.deno/bin/deno'}},
+        'remote_components': ['ejs:github'],
+    }
+    self.youtube_api_key = youtube_api_key
 
     def extract_metadata(self, url: str, platform: str) -> Dict[str, Any]:
         """Extract all metadata from video URL"""
