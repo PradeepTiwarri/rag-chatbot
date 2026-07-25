@@ -35,12 +35,13 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
       alert("Please enter both YouTube and Instagram URLs");
       return;
     }
+    const BACKEND_URL = "http://3.25.57.31:8000"; 
 
     setIsLoading(true);
     setPipelineStep("transcripts");
 
     try {
-      const response = await fetch(`/api/ingest`, {
+      const response = await fetch(`${BACKEND_URL}/api/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
