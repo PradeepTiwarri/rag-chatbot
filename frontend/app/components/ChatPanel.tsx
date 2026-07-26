@@ -226,10 +226,12 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Quick Actions */}
-      <div className="px-3 sm:px-5 pt-3 border-t border-surface-200">
-        <QuickActions onActionClick={handleQuickAction} />
-      </div>
+      {/* Quick Actions – hidden once chat has started */}
+      {messages.length === 0 && (
+        <div className="px-3 sm:px-5 pt-3 border-t border-surface-200">
+          <QuickActions onActionClick={handleQuickAction} />
+        </div>
+      )}
 
       {/* Input */}
       <form onSubmit={handleSubmit} className="px-3 sm:px-5 pb-3 sm:pb-4">
