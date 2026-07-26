@@ -6,6 +6,8 @@ import asyncio
 import json
 import re
 import os
+import uuid
+import threading
 
 from ..config import config
 from ..tools import store_video_metadata
@@ -19,6 +21,7 @@ router = APIRouter()
 
 # Session storage
 session_memory: Dict[str, List[Dict]] = {}
+ingestion_tasks: Dict[str, Dict[str, Any]] = {}
 _rag_agent = None
 
 def get_agent():
@@ -182,28 +185,63 @@ async def chat_stream(request: ChatRequest):
 
 @router.post("/ingest")
 async def ingest_videos(request: IngestRequest):
-    """Ingest YouTube and Instagram videos"""
+    """Start async ingestion of YouTube and Instagram videos. Returns a task_id for polling."""
     
+    task_id = str(uuid.uuid4())[:8]
+    ingestion_tasks[task_id] = {
+        "status": "processing",
+        "step": "starting",
+        "results": None,
+    }
+    
+    # Run heavy ingestion work in a background thread
+    thread = threading.Thread(
+        target=_run_ingestion,
+        args=(task_id, request.youtube_url, request.instagram_url,
+              request.video_id_a, request.video_id_b),
+        daemon=True,
+    )
+    thread.start()
+    
+    return {"task_id": task_id}
+
+
+@router.get("/ingest/status/{task_id}")
+async def ingest_status(task_id: str):
+    """Poll the status of an ingestion task."""
+    task = ingestion_tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+
+def _run_ingestion(task_id: str, youtube_url: str, instagram_url: str,
+                   video_id_a: str, video_id_b: str):
+    """Background worker that performs the actual ingestion."""
+    
+    task = ingestion_tasks[task_id]
     results = {}
     
-    # Process YouTube (Video A)
+    # ── Process YouTube (Video A) ──
     try:
+        task["step"] = "youtube_transcript"
         print("\n========== YOUTUBE ==========")
-        print(f"URL: {request.youtube_url}")
+        print(f"URL: {youtube_url}")
         
         youtube_extractor = VideoExtractor(youtube_api_key=config.YOUTUBE_DATA_API_KEY)
-        youtube_metadata = youtube_extractor.extract_metadata(request.youtube_url, "youtube")
+        youtube_metadata = youtube_extractor.extract_metadata(youtube_url, "youtube")
         youtube_metadata = youtube_extractor.enrich_with_api_follower_count(youtube_metadata)
-        youtube_metadata['video_id'] = request.video_id_a
+        youtube_metadata['video_id'] = video_id_a
         
         transcript_fetcher = TranscriptFetcher()
-        youtube_segments = transcript_fetcher.fetch_youtube_transcript(request.youtube_url)
+        youtube_segments = transcript_fetcher.fetch_youtube_transcript(youtube_url)
         duration = youtube_metadata['duration_seconds']
         
         print(f"YOUTUBE: {len(youtube_segments)} segments, duration={duration}s")
         
         # Use manual chunks
-        chunks = create_manual_chunks(youtube_segments, duration, request.video_id_a)
+        task["step"] = "youtube_embeddings"
+        chunks = create_manual_chunks(youtube_segments, duration, video_id_a)
         
         for level in ['fine', 'medium', 'coarse']:
             level_chunks = chunks[level]
@@ -211,12 +249,11 @@ async def ingest_videos(request: IngestRequest):
                 print(f"YOUTUBE: Embedding {len(level_chunks)} {level} chunks...")
                 for chunk in level_chunks:
                     chunk['embedding'] = bge_embedder.embed_text(chunk['text'])
-                pinecone_client.upsert_chunks(level_chunks, request.video_id_a)
+                pinecone_client.upsert_chunks(level_chunks, video_id_a)
         
-        store_video_metadata(request.video_id_a, youtube_metadata)
+        store_video_metadata(video_id_a, youtube_metadata)
         
-        # Return metadata along with chunk counts
-        results[request.video_id_a] = {
+        results[video_id_a] = {
             'status': 'success',
             'metadata': youtube_metadata,
             'chunk_counts': {k: len(v) for k, v in chunks.items()}
@@ -224,15 +261,16 @@ async def ingest_videos(request: IngestRequest):
         
     except Exception as e:
         print(f"YouTube error: {e}")
-        results[request.video_id_a] = {
+        results[video_id_a] = {
             'status': 'error',
             'error': str(e)
         }
     
-    # Process Instagram (Video B)
+    # ── Process Instagram (Video B) ──
     try:
+        task["step"] = "instagram_transcript"
         print("\n========== INSTAGRAM ==========")
-        print(f"URL: {request.instagram_url}")
+        print(f"URL: {instagram_url}")
         
         transcript_fetcher = TranscriptFetcher()
         
@@ -241,7 +279,7 @@ async def ingest_videos(request: IngestRequest):
         try:
             from ..ingestion.instagram_playwright import InstagramPlaywrightExtractor
             pw = InstagramPlaywrightExtractor()
-            playwright_data = await asyncio.to_thread(pw.extract, request.instagram_url)
+            playwright_data = pw.extract(instagram_url)
             print(f"Playwright data: creator={playwright_data.get('creator')}, "
                   f"likes={playwright_data.get('likes')}, comments={playwright_data.get('comments')}")
         except Exception as pw_error:
@@ -251,7 +289,7 @@ async def ingest_videos(request: IngestRequest):
         instagram_metadata = None
         try:
             instagram_extractor = InstagramExtractor()
-            instagram_metadata = instagram_extractor.extract_metadata(request.instagram_url, "instagram")
+            instagram_metadata = instagram_extractor.extract_metadata(instagram_url, "instagram")
             print("yt-dlp extraction succeeded")
         except Exception as ytdlp_error:
             print(f"yt-dlp Instagram failed (auth issue): {ytdlp_error}")
@@ -286,13 +324,13 @@ async def ingest_videos(request: IngestRequest):
             engagement_rate = ((pw_likes + pw_comments) / pw_views * 100) if pw_views > 0 else 0
             
             # Extract reel ID from URL for hashtag/description fallback
-            reel_id_match = re.search(r'/reel/([^/?]+)', request.instagram_url)
+            reel_id_match = re.search(r'/reel/([^/?]+)', instagram_url)
             reel_id = reel_id_match.group(1) if reel_id_match else "unknown"
             
             instagram_metadata = {
                 'video_id': None,
                 'platform': 'instagram',
-                'url': request.instagram_url,
+                'url': instagram_url,
                 'creator': playwright_data.get("creator", "Unknown"),
                 'creator_id': playwright_data.get("creator_id"),
                 'follower_count': playwright_data.get("follower_count"),
@@ -305,7 +343,7 @@ async def ingest_videos(request: IngestRequest):
                 'duration_seconds': 0,
                 'hashtags': [],
                 'thumbnail': '',
-                'video_url': request.instagram_url,
+                'video_url': instagram_url,
                 'description': '',
             }
         else:
@@ -321,10 +359,10 @@ async def ingest_videos(request: IngestRequest):
             instagram_metadata["engagement_rate"] = ((final_likes + final_comments) / estimated_views * 100)
             print(f"Final views: {estimated_views:,}, engagement: {instagram_metadata['engagement_rate']:.1f}%")
         
-        instagram_metadata["video_id"] = request.video_id_b
+        instagram_metadata["video_id"] = video_id_b
         
         # Get transcript
-        instagram_segments = transcript_fetcher.fetch_instagram_transcript(request.instagram_url)
+        instagram_segments = transcript_fetcher.fetch_instagram_transcript(instagram_url)
         duration = instagram_metadata.get("duration_seconds", 0)
         
         if duration == 0 and instagram_segments:
@@ -334,7 +372,8 @@ async def ingest_videos(request: IngestRequest):
         print(f"INSTAGRAM: {len(instagram_segments)} segments, duration={duration}s")
         
         # Use manual chunks
-        chunks = create_manual_chunks(instagram_segments, duration, request.video_id_b)
+        task["step"] = "instagram_embeddings"
+        chunks = create_manual_chunks(instagram_segments, duration, video_id_b)
         print(f"INSTAGRAM CHUNKS: fine={len(chunks['fine'])}, medium={len(chunks['medium'])}, coarse={len(chunks['coarse'])}")
         
         for level in ['fine', 'medium', 'coarse']:
@@ -343,12 +382,12 @@ async def ingest_videos(request: IngestRequest):
                 print(f"INSTAGRAM: Embedding {len(level_chunks)} {level} chunks...")
                 for chunk in level_chunks:
                     chunk['embedding'] = bge_embedder.embed_text(chunk['text'])
-                pinecone_client.upsert_chunks(level_chunks, request.video_id_b)
+                pinecone_client.upsert_chunks(level_chunks, video_id_b)
         
-        store_video_metadata(request.video_id_b, instagram_metadata)
+        task["step"] = "storage"
+        store_video_metadata(video_id_b, instagram_metadata)
         
-        # Return metadata along with chunk counts
-        results[request.video_id_b] = {
+        results[video_id_b] = {
             'status': 'success',
             'metadata': instagram_metadata,
             'chunk_counts': {k: len(v) for k, v in chunks.items()}
@@ -358,12 +397,16 @@ async def ingest_videos(request: IngestRequest):
         print(f"Instagram error: {e}")
         import traceback
         traceback.print_exc()
-        results[request.video_id_b] = {
+        results[video_id_b] = {
             'status': 'error',
             'error': str(e)
         }
     
-    return results
+    # Mark task as completed
+    task["status"] = "completed"
+    task["step"] = "done"
+    task["results"] = results
+    print(f"\n===== INGESTION TASK {task_id} COMPLETED =====")
 
 @router.get("/video/{video_id}/metadata")
 async def get_video_metadata_endpoint(video_id: str):

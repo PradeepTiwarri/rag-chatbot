@@ -41,6 +41,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
     setPipelineStep("transcripts");
 
     try {
+      // Step 1: Fire off ingestion — returns instantly with task_id
       const response = await fetch(`/api/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -50,33 +51,69 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
         }),
       });
 
-      setPipelineStep("embeddings");
+      const startData = await response.json();
 
-      const data: IngestResponse = await response.json();
-
-      setPipelineStep("storage");
-
-      if (
-        data.A.status === "success" &&
-        data.B.status === "success" &&
-        data.A.metadata &&
-        data.B.metadata
-      ) {
-        setPipelineStep("done");
-        setTimeout(() => {
-          onIngestComplete(data.A.metadata!, data.B.metadata!);
-        }, 600);
-      } else {
-        const errorMsg =
-          data.A.error || data.B.error || "Unknown error during ingestion";
-        alert(`Ingestion error: ${errorMsg}`);
+      if (!startData.task_id) {
+        alert("Failed to start ingestion: no task_id returned");
         setPipelineStep("idle");
+        setIsLoading(false);
+        return;
       }
+
+      const taskId = startData.task_id;
+
+      // Step 2: Poll for status every 3 seconds
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`/api/ingest/status/${taskId}`);
+          const statusData = await statusRes.json();
+
+          // Map backend steps to pipeline UI steps
+          const step = statusData.step || "";
+          if (step.includes("youtube_transcript") || step.includes("instagram_transcript")) {
+            setPipelineStep("transcripts");
+          } else if (step.includes("youtube_embeddings") || step.includes("instagram_embeddings")) {
+            setPipelineStep("embeddings");
+          } else if (step === "storage") {
+            setPipelineStep("storage");
+          }
+
+          // Check if completed
+          if (statusData.status === "completed" && statusData.results) {
+            clearInterval(pollInterval);
+
+            const data = statusData.results as IngestResponse;
+
+            setPipelineStep("storage");
+
+            if (
+              data.A?.status === "success" &&
+              data.B?.status === "success" &&
+              data.A.metadata &&
+              data.B.metadata
+            ) {
+              setPipelineStep("done");
+              setTimeout(() => {
+                onIngestComplete(data.A.metadata!, data.B.metadata!);
+              }, 600);
+            } else {
+              const errorMsg =
+                data.A?.error || data.B?.error || "Unknown error during ingestion";
+              alert(`Ingestion error: ${errorMsg}`);
+              setPipelineStep("idle");
+            }
+
+            setIsLoading(false);
+          }
+        } catch (pollError) {
+          console.error("Poll error:", pollError);
+          // Don't clear interval — keep retrying
+        }
+      }, 3000);
     } catch (error) {
       console.error("Ingest error:", error);
       alert("Failed to connect to backend");
       setPipelineStep("idle");
-    } finally {
       setIsLoading(false);
     }
   };

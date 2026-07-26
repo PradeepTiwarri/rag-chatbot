@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
 
     const data = await response.json();
 
+    // Backend now returns { task_id: "..." } instantly
     return NextResponse.json(data, {
       status: response.status,
     });
@@ -26,13 +27,8 @@ export async function POST(req: NextRequest) {
     console.error("Ingest proxy error:", error);
 
     return NextResponse.json(
-      {
-        A: { status: "error", error: "Failed to connect to backend" },
-        B: { status: "error", error: "Failed to connect to backend" }
-      },
-      {
-        status: 500,
-      }
+      { error: "Failed to connect to backend" },
+      { status: 500 }
     );
   }
 }
