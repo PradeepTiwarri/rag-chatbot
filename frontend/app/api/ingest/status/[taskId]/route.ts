@@ -13,7 +13,7 @@ export async function GET(
 
     const response = await fetch(
       `${API_BASE_URL}/api/ingest/status/${taskId}`,
-      { method: "GET" }
+      { method: "GET", cache: "no-store" }
     );
 
     const data = await response.json();
