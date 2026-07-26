@@ -253,7 +253,7 @@ def _run_ingestion(task_id: str, youtube_url: str, instagram_url: str,
         
         store_video_metadata(video_id_a, youtube_metadata)
         
-        results[video_id_a] = {
+        results["A"] = {
             'status': 'success',
             'metadata': youtube_metadata,
             'chunk_counts': {k: len(v) for k, v in chunks.items()}
@@ -261,7 +261,7 @@ def _run_ingestion(task_id: str, youtube_url: str, instagram_url: str,
         
     except Exception as e:
         print(f"YouTube error: {e}")
-        results[video_id_a] = {
+        results["A"] = {
             'status': 'error',
             'error': str(e)
         }
@@ -387,7 +387,7 @@ def _run_ingestion(task_id: str, youtube_url: str, instagram_url: str,
         task["step"] = "storage"
         store_video_metadata(video_id_b, instagram_metadata)
         
-        results[video_id_b] = {
+        results["B"] = {
             'status': 'success',
             'metadata': instagram_metadata,
             'chunk_counts': {k: len(v) for k, v in chunks.items()}
@@ -397,7 +397,7 @@ def _run_ingestion(task_id: str, youtube_url: str, instagram_url: str,
         print(f"Instagram error: {e}")
         import traceback
         traceback.print_exc()
-        results[video_id_b] = {
+        results["B"] = {
             'status': 'error',
             'error': str(e)
         }
