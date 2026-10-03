@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { IngestResponse, VideoMetadata } from "../types";
-import { ShieldCheck, CheckCircle2, Loader2, Circle } from "lucide-react";
+import { ShieldCheck, CheckCircle2, Loader2, Circle, AlertCircle, X } from "lucide-react";
 
 interface IngestFormProps {
   onIngestComplete: (videoA: VideoMetadata, videoB: VideoMetadata) => void;
@@ -17,6 +17,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
   const [ytValidated, setYtValidated] = useState(false);
   const [igValidated, setIgValidated] = useState(false);
   const [pipelineStep, setPipelineStep] = useState<PipelineStep>("idle");
+  const [error, setError] = useState<string | null>(null);
 
   const validateYoutube = () => {
     if (youtubeUrl.match(/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts\//)) {
@@ -32,10 +33,10 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
 
   const handleIngest = async () => {
     if (!youtubeUrl || !instagramUrl) {
-      alert("Please enter both YouTube and Instagram URLs");
+      setError("Please enter both a YouTube and an Instagram URL.");
       return;
     }
-    
+    setError(null);
 
     setIsLoading(true);
     setPipelineStep("transcripts");
@@ -54,7 +55,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
       const startData = await response.json();
 
       if (!startData.task_id) {
-        alert("Failed to start ingestion: no task_id returned");
+        setError("Failed to start ingestion. Please try again.");
         setPipelineStep("idle");
         setIsLoading(false);
         return;
@@ -99,7 +100,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
             } else {
               const errorMsg =
                 data.A?.error || data.B?.error || "Unknown error during ingestion";
-              alert(`Ingestion error: ${errorMsg}`);
+              setError(`Ingestion failed: ${errorMsg}`);
               setPipelineStep("idle");
             }
 
@@ -112,7 +113,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
       }, 3000);
     } catch (error) {
       console.error("Ingest error:", error);
-      alert("Failed to connect to backend");
+      setError("Could not reach the server. Please try again in a moment.");
       setPipelineStep("idle");
       setIsLoading(false);
     }
@@ -143,7 +144,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start pt-16 page-bg relative overflow-x-hidden">
+    <div className="min-h-dvh flex flex-col items-center justify-start pt-16 pb-10 page-bg relative overflow-x-hidden">
       {/* Top Nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-surface-200">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 py-3">
@@ -151,12 +152,12 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
             <span className="font-display font-extrabold text-lg text-surface-900">
               RAG
             </span>
-            <span className="font-display font-extrabold text-lg text-surface-900">
+            <span className="font-display font-extrabold text-lg" style={{ color: "#FF4F00" }}>
               {" "}Video Analyst
             </span>
           </div>
           <div className="hidden sm:flex items-center gap-6 lg:gap-8">
-            <a className="text-sm font-medium text-surface-900 hover:text-accent-600 transition-colors cursor-pointer">
+            <a className="text-sm font-medium cursor-pointer" style={{ color: "#FF4F00", textDecoration: "underline", textUnderlineOffset: "4px", textDecorationThickness: "2px" }}>
               Dashboard
             </a>
             <a className="text-sm font-medium text-surface-500 hover:text-accent-600 transition-colors cursor-pointer">
@@ -189,12 +190,15 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
         <h1 className="text-2xl sm:text-4xl md:text-5xl font-display font-extrabold text-surface-900 tracking-tight">
           Ingest Analysis Pipeline
         </h1>
+        <p className="mt-2 sm:mt-3 text-sm sm:text-base text-surface-500 max-w-2xl mx-auto text-balance">
+          Paste a YouTube video and an Instagram Reel to compare them side by side.
+        </p>
       </div>
 
       {/* Input Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 w-full max-w-4xl px-4 mb-6 sm:mb-8 fade-in-up relative z-10">
         {/* YouTube Card */}
-        <div className="bg-white rounded-2xl border border-surface-200 shadow-card p-6 card-lift">
+        <div className="flex flex-col bg-white rounded-2xl border border-surface-200 shadow-card p-5 sm:p-6 card-lift">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -206,7 +210,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
               YouTube
             </h3>
           </div>
-          <p className="text-sm text-surface-500 mb-4">
+          <p className="text-sm text-surface-500 mb-4 min-h-[2.75rem]">
             Enter a video link to extract high-fidelity transcripts and visual
             metadata for indexing.
           </p>
@@ -223,12 +227,12 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
             placeholder="Paste YouTube URL here..."
             className="w-full px-4 py-2.5 bg-white border border-surface-300 rounded-xl text-sm text-surface-800 placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-accent-200 focus:border-accent-400 transition-all"
           />
-          <p className="text-[11px] text-accent-400 mt-1 font-mono">
+          <p className="text-[11px] text-surface-400 mt-1.5 mb-4 font-mono break-all">
             Example: youtube.com/watch?v=dQw4w9WgXcQ
           </p>
           <button
             onClick={validateYoutube}
-            className={`mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-medium transition-all ${ytValidated
+            className={`mt-auto w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-medium transition-all ${ytValidated
               ? "border-green-300 bg-green-50 text-green-700"
               : "border-surface-300 bg-white text-surface-700 hover:border-accent-300 hover:bg-accent-50"
               }`}
@@ -239,21 +243,21 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
         </div>
 
         {/* Instagram Card */}
-        <div className="bg-white rounded-2xl border border-surface-200 shadow-card p-6 card-lift">
+        <div className="flex flex-col bg-white rounded-2xl border border-surface-200 shadow-card p-5 sm:p-6 card-lift">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <rect width="24" height="24" rx="6" fill="#FFF7ED" />
-                <rect x="6" y="6" width="12" height="12" rx="3" stroke="#F97316" strokeWidth="1.5" fill="none" />
-                <circle cx="12" cy="12" r="3" stroke="#F97316" strokeWidth="1.5" fill="none" />
-                <circle cx="16" cy="8" r="1" fill="#F97316" />
+                <rect width="24" height="24" rx="6" fill="#FCE7F3" />
+                <rect x="6" y="6" width="12" height="12" rx="3" stroke="#E1306C" strokeWidth="1.5" fill="none" />
+                <circle cx="12" cy="12" r="3" stroke="#E1306C" strokeWidth="1.5" fill="none" />
+                <circle cx="16" cy="8" r="1" fill="#E1306C" />
               </svg>
             </div>
             <h3 className="text-lg font-display font-bold text-surface-900">
               Instagram
             </h3>
           </div>
-          <p className="text-sm text-surface-500 mb-4">
+          <p className="text-sm text-surface-500 mb-4 min-h-[2.75rem]">
             Extract frames and OCR data from Reels for downstream vector search
             indexing.
           </p>
@@ -270,12 +274,12 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
             placeholder="Paste Instagram Reel URL here..."
             className="w-full px-4 py-2.5 bg-white border border-surface-300 rounded-xl text-sm text-surface-800 placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-accent-200 focus:border-accent-400 transition-all"
           />
-          <p className="text-[11px] text-accent-400 mt-1 font-mono">
-            Example: instagram.com/reels/C4p_ByIxpV/
+          <p className="text-[11px] text-surface-400 mt-1.5 mb-4 font-mono break-all">
+            Example: instagram.com/reel/C4p_ByIxpV/
           </p>
           <button
             onClick={validateInstagram}
-            className={`mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-medium transition-all ${igValidated
+            className={`mt-auto w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-medium transition-all ${igValidated
               ? "border-green-300 bg-green-50 text-green-700"
               : "border-surface-300 bg-white text-surface-700 hover:border-accent-300 hover:bg-accent-50"
               }`}
@@ -285,6 +289,22 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
           </button>
         </div>
       </div>
+
+      {/* Error banner */}
+      {error && (
+        <div
+          role="alert"
+          className="w-full max-w-xl px-4 mb-4 relative z-10 fade-in-up"
+        >
+          <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <p className="flex-1 break-words">{error}</p>
+            <button onClick={() => setError(null)} aria-label="Dismiss error" className="flex-shrink-0 hover:text-red-900">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Analyze Button */}
       <div className="w-full max-w-xl px-4 mb-4 sm:mb-6 fade-in-up relative z-10">
@@ -299,7 +319,7 @@ export default function IngestForm({ onIngestComplete }: IngestFormProps) {
 
       {/* Pipeline Progress */}
       {pipelineStep !== "idle" && (
-        <div className="bg-white rounded-2xl border border-surface-200 shadow-card px-4 sm:px-8 py-5 max-w-xl w-full mx-4 fade-in-up relative z-10">
+        <div className="bg-white rounded-2xl border border-surface-200 shadow-card px-4 sm:px-8 py-5 max-w-xl w-[calc(100%-2rem)] mb-10 fade-in-up relative z-10">
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 flex-wrap">
             {/* Step 1 */}
             <div className="flex items-center gap-1.5">

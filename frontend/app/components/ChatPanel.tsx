@@ -2,7 +2,8 @@
 
 import { useChat } from "@ai-sdk/react";
 import { useState, useRef, useEffect } from "react";
-import { Send, Loader2, Mic, Paperclip, Trash2, MoreVertical } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import { Send, Trash2 } from "lucide-react";
 import CitationBadge from "./CitationBadge";
 import QuickActions from "./QuickActions";
 import { Citation } from "../types";
@@ -18,7 +19,8 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
     handleInputChange,
     handleSubmit,
     isLoading,
-    setInput,
+    append,
+    setMessages,
   } = useChat({
     api: `/api/chat`,
     body: { video_ids: videoIds },
@@ -56,15 +58,14 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
   };
 
   const handleQuickAction = (question: string) => {
-    setInput(question);
-    const fakeEvent = { preventDefault: () => { } } as React.FormEvent;
-    handleSubmit(fakeEvent);
+    if (isLoading) return;
+    append({ role: "user", content: question });
   };
 
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl border border-surface-200 shadow-card overflow-hidden min-w-0">
       {/* Header */}
-      <div className="px-3 sm:px-5 py-3 sm:py-4 border-b border-surface-200 flex items-center justify-between">
+      <div className="px-4 sm:px-5 py-3 border-b border-surface-200 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center">
             <svg
@@ -89,31 +90,35 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
             </span>
             <div className="flex items-center gap-1.5 mt-0.5">
               <div className="w-2 h-2 rounded-full bg-green-500" />
-              <span className="text-[11px] text-surface-500">Llama 3.1</span>
+              <span className="text-[11px] text-surface-500">Online · Llama 3.1</span>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="p-2 rounded-lg hover:bg-surface-100 transition-colors text-surface-400 hover:text-surface-600">
+          <button
+            type="button"
+            onClick={() => setMessages([])}
+            disabled={messages.length === 0 || isLoading}
+            title="Clear conversation"
+            aria-label="Clear conversation"
+            className="p-2 rounded-lg hover:bg-surface-100 transition-colors text-surface-400 hover:text-surface-600 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
             <Trash2 className="w-4 h-4" />
-          </button>
-          <button className="p-2 rounded-lg hover:bg-surface-100 transition-colors text-surface-400 hover:text-surface-600">
-            <MoreVertical className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-3 sm:py-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 py-4 space-y-4">
         {messages.length === 0 && (
-          <div className="text-center text-surface-400 mt-12">
+          <div className="h-full flex flex-col items-center justify-center text-center text-surface-400 px-4">
             <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-accent-50 flex items-center justify-center">
               <svg
                 width="24"
                 height="24"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="#F97316"
+                stroke="#FF4F00"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -124,7 +129,7 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
             <p className="text-sm font-medium text-surface-600">
               Ask me anything about these videos!
             </p>
-            <p className="text-xs mt-1 text-surface-400">
+            <p className="text-xs mt-1 text-surface-400 max-w-sm">
               Try: &quot;Compare the engagement rates&quot; or &quot;What did
               they say in the opening?&quot;
             </p>
@@ -163,14 +168,20 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
               )}
 
               <div
-                className={`max-w-[90%] sm:max-w-[75%] rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 ${message.role === "user"
+                className={`min-w-0 max-w-[90%] sm:max-w-[75%] rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 ${message.role === "user"
                     ? "bg-accent-50 border border-accent-100 text-surface-800"
                     : "bg-surface-100 border border-surface-200 text-surface-800"
                   }`}
               >
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                  {text}
-                </p>
+                {message.role === "assistant" ? (
+                  <div className="md-body text-sm leading-relaxed break-words">
+                    <ReactMarkdown>{text}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="text-sm whitespace-pre-wrap leading-relaxed break-words">
+                    {text}
+                  </p>
+                )}
 
                 {msgCitations.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2 border-t border-surface-200">
@@ -228,13 +239,13 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
 
       {/* Quick Actions – hidden once chat has started */}
       {messages.length === 0 && (
-        <div className="px-3 sm:px-5 pt-3 border-t border-surface-200">
+        <div className="px-4 sm:px-5 pt-3 border-t border-surface-200 flex-shrink-0">
           <QuickActions onActionClick={handleQuickAction} />
         </div>
       )}
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="px-3 sm:px-5 pb-3 sm:pb-4">
+      <form onSubmit={handleSubmit} className="px-4 sm:px-5 pb-4 pt-1 flex-shrink-0">
         <div className="flex items-center gap-2 bg-surface-100 border border-surface-200 rounded-2xl px-4 py-2 focus-within:ring-2 focus-within:ring-accent-200 focus-within:border-accent-400 transition-all">
           <input
             type="text"
@@ -246,20 +257,9 @@ export default function ChatPanel({ videoIds }: ChatPanelProps) {
           />
           <div className="flex items-center gap-1">
             <button
-              type="button"
-              className="p-1.5 rounded-lg hover:bg-surface-200 transition-colors text-surface-400"
-            >
-              <Mic className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              className="p-1.5 rounded-lg hover:bg-surface-200 transition-colors text-surface-400"
-            >
-              <Paperclip className="w-4 h-4" />
-            </button>
-            <button
               type="submit"
               disabled={isLoading || !input.trim()}
+              aria-label="Send message"
               className="p-2 bg-accent-500 hover:bg-accent-600 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed send-glow"
             >
               <Send className="w-4 h-4 text-white" />

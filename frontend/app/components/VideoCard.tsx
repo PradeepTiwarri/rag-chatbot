@@ -56,7 +56,7 @@ function InstagramLogo() {
   );
 }
 
-export default function VideoCard({ video }: VideoCardProps) {
+export default function VideoCard({ video, side }: VideoCardProps) {
   const [thumbError, setThumbError] = useState(false);
   const isYoutube   = video.platform === "youtube";
   const isInstagram = video.platform === "instagram";
@@ -84,136 +84,146 @@ export default function VideoCard({ video }: VideoCardProps) {
         { label: "ENGAGEMENT", value: video.engagement_rate ? `${video.engagement_rate.toFixed(1)}%` : "—", icon: TrendingUp, highlight: true },
       ];
 
+  const hasDuration = video.duration_seconds > 0;
+  const durationBadge = hasDuration && (
+    <div
+      className="absolute bottom-2 right-2 text-white text-[11px] font-mono px-2 py-0.5 rounded z-10"
+      style={{ background: "rgba(0,0,0,0.72)" }}
+    >
+      {formatDuration(video.duration_seconds)}
+    </div>
+  );
+
   return (
-    <div className="bg-white rounded-2xl border border-neutral-200 shadow-card overflow-hidden card-lift">
+    <div className="h-full flex flex-col bg-white rounded-2xl border border-neutral-200 shadow-card overflow-hidden card-lift">
 
       {/* Header */}
-      <div className="px-5 py-3.5 flex items-center justify-between border-b border-neutral-200">
-        <div className="flex items-center gap-2.5">
+      <div className="px-4 sm:px-5 py-3 flex items-center justify-between gap-3 border-b border-neutral-200">
+        <div className="flex items-center gap-2.5 min-w-0">
           {isYoutube ? <YoutubeLogo /> : <InstagramLogo />}
-          <span className="font-display font-bold text-[15px]" style={{ color: "#2B2B2B" }}>
+          <span className="font-display font-bold text-[15px] truncate" style={{ color: "#2B2B2B" }}>
             {isYoutube ? "YouTube Insight" : "Instagram Reel"}
           </span>
         </div>
         <span
-          className="text-[11px] font-mono px-2 py-0.5 rounded"
-          style={{ background: "#F7F7F7", color: "#9E9E9E", border: "1px solid #E0E0E0" }}
+          className="flex-shrink-0 text-[11px] font-semibold px-2.5 py-0.5 rounded-full"
+          style={{ background: "#F7F7F7", color: "#757575", border: "1px solid #E0E0E0" }}
         >
-          {video.video_id === "A"
-            ? `yt_${video.views ? Math.floor(video.views / 1000) : "–"}`
-            : `ig_${video.likes ? Math.floor(video.likes / 10) : "–"}`}
+          {side === "left" ? "Video A" : "Video B"}
         </span>
       </div>
 
-      {/* Media */}
-      {isYoutube ? (
-        <div className="relative w-full overflow-hidden aspect-video" style={{ background: "#1a1a1a" }}>
-          {ytEmbed ? (
-            <iframe
-              src={ytEmbed}
-              className="absolute inset-0 w-full h-full"
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          ) : (
-            <div className="thumb-strip w-full h-full">
-              {ytThumbs.map((src, i) => (
-                <img key={i} src={src} alt={`Frame ${i + 1}`} className="w-full h-full object-cover" />
-              ))}
-            </div>
-          )}
-          {video.duration_seconds > 0 && (
-            <div
-              className="absolute bottom-2 right-2 text-white text-[11px] font-mono px-2 py-0.5 rounded z-10"
-              style={{ background: "rgba(0,0,0,0.72)" }}
-            >
-              {formatDuration(video.duration_seconds)}
-            </div>
-          )}
-        </div>
-      ) : (
-        /* Instagram — use neutral bg, show embed or thumbnail or link fallback */
-        <div className="relative w-full overflow-hidden" style={{ background: "#F3F3F3", aspectRatio: "9/16", maxHeight: "480px" }}>
-          {igEmbed ? (
-            <iframe
-              src={igEmbed}
-              className="w-full border-0"
-              style={{ height: "100%" }}
-              scrolling="no"
-              allowTransparency
-              allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-            />
-          ) : video.thumbnail && !thumbError ? (
-            <a href={video.url} target="_blank" rel="noopener noreferrer" className="block relative group h-full">
-              <img
-                src={video.thumbnail}
-                alt={video.title || "Instagram Reel"}
-                className="w-full h-full object-cover"
-                onError={() => setThumbError(true)}
+      {/* Media — identical footprint for both platforms so the cards line up */}
+      <div
+        className={`relative w-full overflow-hidden ${
+          isYoutube ? "aspect-video" : "aspect-[4/5] sm:aspect-video"
+        }`}
+        style={{ background: isYoutube ? "#1a1a1a" : "#F3F3F3" }}
+      >
+        {isYoutube ? (
+          <>
+            {ytEmbed ? (
+              <iframe
+                src={ytEmbed}
+                title={video.title || "YouTube video"}
+                className="absolute inset-0 w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
               />
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
-                <div
-                  className="w-16 h-16 rounded-full flex items-center justify-center"
-                  style={{ background: "rgba(255,255,255,0.30)", backdropFilter: "blur(6px)" }}
-                >
-                  <Play className="w-8 h-8 text-white ml-1" />
-                </div>
+            ) : (
+              <div className="thumb-strip absolute inset-0 w-full h-full">
+                {ytThumbs.map((src, i) => (
+                  <img key={i} src={src} alt={`Frame ${i + 1}`} className="w-full h-full object-cover" />
+                ))}
               </div>
-              {video.duration_seconds > 0 && (
-                <div
-                  className="absolute bottom-2 right-2 text-white text-[11px] font-mono px-2 py-0.5 rounded z-10"
-                  style={{ background: "rgba(0,0,0,0.72)" }}
-                >
-                  {formatDuration(video.duration_seconds)}
-                </div>
-              )}
-            </a>
-          ) : (
-            /* Graceful fallback — neutral card with link, no black box */
-            <a
-              href={video.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-col items-center justify-center gap-3 h-full hover:bg-neutral-100 transition-colors"
-            >
+            )}
+            {durationBadge}
+          </>
+        ) : igEmbed ? (
+          <iframe
+            src={igEmbed}
+            title={video.title || "Instagram Reel"}
+            className="absolute inset-0 w-full h-full border-0"
+            scrolling="no"
+            allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+          />
+        ) : video.thumbnail && !thumbError ? (
+          <a href={video.url} target="_blank" rel="noopener noreferrer" className="absolute inset-0 block group" style={{ background: "#111" }}>
+            <img
+              src={video.thumbnail}
+              alt={video.title || "Instagram Reel"}
+              className="w-full h-full object-contain"
+              onError={() => setThumbError(true)}
+            />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
               <div
-                className="w-14 h-14 rounded-full flex items-center justify-center"
-                style={{ background: "linear-gradient(135deg,#E1306C,#833AB4)" }}
+                className="w-16 h-16 rounded-full flex items-center justify-center"
+                style={{ background: "rgba(255,255,255,0.30)", backdropFilter: "blur(6px)" }}
               >
-                <Play className="w-7 h-7 text-white ml-0.5" />
+                <Play className="w-8 h-8 text-white ml-1" />
               </div>
-              <span className="text-sm font-medium flex items-center gap-1.5" style={{ color: "#E1306C" }}>
-                View on Instagram <ExternalLink className="w-3.5 h-3.5" />
-              </span>
-            </a>
-          )}
-        </div>
-      )}
+            </div>
+            {durationBadge}
+          </a>
+        ) : (
+          <a
+            href={video.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 hover:bg-neutral-100 transition-colors"
+          >
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg,#E1306C,#833AB4)" }}
+            >
+              <Play className="w-7 h-7 text-white ml-0.5" />
+            </div>
+            <span className="text-sm font-medium flex items-center gap-1.5" style={{ color: "#E1306C" }}>
+              View on Instagram <ExternalLink className="w-3.5 h-3.5" />
+            </span>
+          </a>
+        )}
+      </div>
+
+      {/* Title (two-line slot keeps both cards the same height) */}
+      <div className="px-4 sm:px-5 pt-3.5 pb-3 border-t border-neutral-200">
+        <h3
+          className="font-display font-bold text-[15px] leading-snug line-clamp-2 min-h-[2.75rem]"
+          style={{ color: "#2B2B2B" }}
+          title={video.title}
+        >
+          {video.title || "Untitled video"}
+        </h3>
+      </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 border-t" style={{ borderColor: "#E0E0E0" }}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 border-t border-neutral-200">
         {metrics.map((m, idx) => (
           <div
             key={m.label}
-            className="py-3 px-2 text-center"
-            style={{ borderRight: idx < metrics.length - 1 ? "1px solid #E0E0E0" : "none" }}
+            className={[
+              "py-3 px-2 text-center border-neutral-200",
+              idx % 2 === 0 ? "border-r" : "",
+              "sm:border-r sm:last:border-r-0",
+              idx < 2 ? "border-b sm:border-b-0" : "",
+            ].join(" ")}
           >
-            <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: "#9E9E9E" }}>
+            <p className="flex items-center justify-center gap-1 text-[10px] uppercase tracking-wider mb-0.5" style={{ color: "#9E9E9E" }}>
+              <m.icon className="w-3 h-3" />
               {m.label}
             </p>
-            <p className="text-[15px] font-bold" style={{ color: m.highlight ? "#FF4F00" : "#2B2B2B" }}>
+            <p className="text-[15px] font-bold tabular-nums" style={{ color: m.highlight ? "#FF4F00" : "#2B2B2B" }}>
               {m.value}
             </p>
           </div>
         ))}
       </div>
 
-      {/* Creator */}
-      <div className="px-4 sm:px-5 py-3 border-t flex flex-col sm:flex-row sm:items-center justify-between gap-2" style={{ borderColor: "#E0E0E0" }}>
-        <div className="flex items-center gap-2.5">
+      {/* Creator — pinned to the bottom of the card */}
+      <div className="mt-auto px-4 sm:px-5 py-3 sm:min-h-[4rem] border-t border-neutral-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2.5 min-w-0">
           <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0"
             style={{
               background: isYoutube
                 ? "linear-gradient(135deg,#FF4F00,#CC3F00)"
@@ -222,22 +232,22 @@ export default function VideoCard({ video }: VideoCardProps) {
           >
             {video.creator?.[0]?.toUpperCase() || "?"}
           </div>
-          <div>
-            <p className="text-sm font-semibold" style={{ color: "#2B2B2B" }}>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate" style={{ color: "#2B2B2B" }}>
               @{video.creator}
             </p>
-            <p className="text-[11px]" style={{ color: "#9E9E9E" }}>
-              {video.follower_count
-                ? formatCount(video.follower_count) + (isYoutube ? " Subscribers" : " Followers")
-                : ""}
-            </p>
+            {video.follower_count ? (
+              <p className="text-[11px]" style={{ color: "#9E9E9E" }}>
+                {formatCount(video.follower_count) + (isYoutube ? " Subscribers" : " Followers")}
+              </p>
+            ) : null}
           </div>
         </div>
 
         {video.hashtags && video.hashtags.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+          <div className="flex items-center gap-1.5 flex-wrap sm:justify-end min-w-0">
             {video.hashtags.slice(0, 3).map((tag) => (
-              <span key={tag} className="tag-pill">
+              <span key={tag} className="tag-pill max-w-[9rem] truncate">
                 {tag.startsWith("#") ? tag : `#${tag}`}
               </span>
             ))}

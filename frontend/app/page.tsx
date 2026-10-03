@@ -27,6 +27,13 @@ export default function Home() {
     setIsIngested(true);
   };
 
+  const handleNewAnalysis = () => {
+    setSidebarOpen(false);
+    setVideoA(null);
+    setVideoB(null);
+    setIsIngested(false);
+  };
+
   // ---------- Ingest Phase: Full-page, no sidebar ----------
   if (!isIngested) {
     return <IngestForm onIngestComplete={handleIngestComplete} />;
@@ -34,8 +41,12 @@ export default function Home() {
 
   // ---------- Dashboard Phase: Sidebar + Content ----------
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+    <div className="flex h-dvh bg-background overflow-hidden">
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onNewAnalysis={handleNewAnalysis}
+      />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Top Navbar */}
@@ -77,12 +88,12 @@ export default function Home() {
 
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             {/* Videos Loaded Badge — hidden on small screens */}
-            <div className="status-loaded hidden lg:inline-flex">
+            <div className="status-loaded hidden lg:inline-flex items-center whitespace-nowrap">
               <svg width="14" height="10" viewBox="0 0 22 16" fill="none">
                 <rect width="22" height="16" rx="4" fill="#FF0000" />
                 <path d="M9 4.5L15 8L9 11.5V8.5V4.5Z" fill="white" />
               </svg>
-              <span>
+              <span className="inline-flex items-center gap-1">
                 Videos Loaded:{" "}
                 <strong style={{ color: "#FF4F00" }}>YouTube</strong>{" "}
                 <Check className="w-3 h-3 inline" style={{ color: "#22c55e" }} /> |{" "}
@@ -106,7 +117,8 @@ export default function Home() {
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-auto px-4 sm:px-6 py-4 sm:py-6 page-bg">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 lg:px-8 py-4 sm:py-6 page-bg">
+          <div className="max-w-[1400px] mx-auto">
           {/* Dashboard Header */}
           <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-4 sm:mb-6 gap-3 relative z-10">
             <div className="min-w-0">
@@ -152,19 +164,19 @@ export default function Home() {
           {/* Video Cards — responsive: 1-col on mobile, 2-col on desktop compare */}
           {videoA && videoB && (
             <div
-              className={`grid gap-4 sm:gap-6 mb-4 sm:mb-6 relative z-10 ${
+              className={`grid items-stretch gap-4 sm:gap-6 mb-4 sm:mb-6 relative z-10 ${
                 viewMode === "compare"
                   ? "grid-cols-1 lg:grid-cols-2"
                   : "grid-cols-1 max-w-2xl"
               }`}
             >
-              <div id="video-a" className="fade-in-up">
+              <div id="video-a" className="fade-in-up min-w-0">
                 <VideoCard video={videoA} side="left" />
               </div>
               {viewMode === "compare" && (
                 <div
                   id="video-b"
-                  className="fade-in-up"
+                  className="fade-in-up min-w-0"
                   style={{ animationDelay: "100ms" }}
                 >
                   <VideoCard video={videoB} side="right" />
@@ -174,8 +186,9 @@ export default function Home() {
           )}
 
           {/* Chat Panel — responsive height */}
-          <div className="h-[400px] sm:h-[480px] lg:h-[520px] relative z-10 fade-in-up" style={{ animationDelay: "200ms" }}>
+          <div className="h-[480px] sm:h-[520px] lg:h-[560px] relative z-10 fade-in-up" style={{ animationDelay: "200ms" }}>
             <ChatPanel videoIds={["A", "B"]} />
+          </div>
           </div>
         </main>
       </div>

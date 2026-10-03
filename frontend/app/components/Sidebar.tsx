@@ -24,9 +24,10 @@ const menuItems = [
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  onNewAnalysis?: () => void;
 }
 
-export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+export default function Sidebar({ isOpen, onClose, onNewAnalysis }: SidebarProps) {
   const [active, setActive] = useState("Video Analysis");
 
   return (
@@ -70,8 +71,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             >
               <Video className="w-5 h-5" />
             </div>
-            <div>
-              <p className="text-sm font-semibold" style={{ color: "#2B2B2B" }}>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold truncate" style={{ color: "#2B2B2B" }}>
                 Analyst Pro
               </p>
               <p className="text-[11px]" style={{ color: "#9E9E9E" }}>
@@ -82,11 +83,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
           {/* New Analysis button — brand primary */}
           <button
+            onClick={onNewAnalysis}
             className="w-full flex items-center justify-center gap-2 py-2.5 text-white text-sm font-semibold rounded-xl transition-opacity hover:opacity-90"
             style={{ background: "#FF4F00" }}
           >
             <Plus className="w-4 h-4" />
-            + New Analysis
+            New Analysis
           </button>
         </div>
 
