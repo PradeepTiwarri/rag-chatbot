@@ -34,3 +34,7 @@ backend/instagram_profile/backend/instagram_profile/
 backend/youtube_cookies.txt
 backend/cookies.txt
 backend/.env
+
+backend/instagram_profile/
+backend/youtube_cookies.txt
+backend/cookies.txt

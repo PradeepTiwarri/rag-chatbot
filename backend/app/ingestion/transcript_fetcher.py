@@ -7,6 +7,7 @@ import warnings
 import os
 import subprocess
 from ..config import config
+from .ytdlp_opts import build_ydl_opts, resolve_youtube_cookies
 
 # Suppress yt-dlp JS runtime warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -16,8 +17,7 @@ class TranscriptFetcher:
     
     def __init__(self):
         self.groq_client = groq.Groq(api_key=config.GROQ_API_KEY) if config.GROQ_API_KEY else None
-        self.cookies_file = self._get_cookies_file_path()
-        self._validate_cookies_file()
+        self.cookies_file = resolve_youtube_cookies()
     
     def _get_cookies_file_path(self) -> Optional[str]:
         """Get the correct cookies file path for the environment"""
@@ -75,31 +75,9 @@ class TranscriptFetcher:
         return True
     
     def _get_ydl_opts_with_cookies(self, extra_opts: Dict = None) -> Dict:
-        """Build yt-dlp options with validated cookies, Deno, and remote components"""
-        base_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'js_runtimes': {'deno': {'path': '/root/.deno/bin/deno'}},
-            'remote_components': ['ejs:github'],
-            'extractor_args': {
-                'youtube': {
-                    'skip': ['hls', 'dash'],
-                    'player_client': ['android', 'ios', 'web'],
-                }
-            }
-        }
-        
-        if extra_opts:
-            base_opts.update(extra_opts)
-        
-        if self.cookies_file and self._validate_cookies_file():
-            base_opts['cookiefile'] = self.cookies_file
-            print(f"Using cookies file: {self.cookies_file}")
-        else:
-            print("No valid cookies file found, proceeding without authentication")
-        
-        return base_opts
-    
+        """Build yt-dlp options with cookies, Deno, and remote components"""
+        return build_ydl_opts(extra_opts)
+
     def fetch_youtube_transcript(self, url: str) -> List[Dict[str, Any]]:
         """Fetch transcript from YouTube with timestamps"""
         video_id = self._extract_youtube_id(url)

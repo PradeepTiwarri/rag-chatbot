@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import json
 import re
 import os
@@ -215,85 +216,101 @@ async def ingest_status(task_id: str):
     return task
 
 
-def _run_ingestion(task_id: str, youtube_url: str, instagram_url: str,
-                   video_id_a: str, video_id_b: str):
-    """Background worker that performs the actual ingestion."""
-    
-    task = ingestion_tasks[task_id]
-    results = {}
-    
-    # ── Process YouTube (Video A) ──
+def _set_step(task: dict, key: str, step: str):
+    """Record progress for one video (A/B) and keep the legacy single `step` field."""
+    steps = task.setdefault("steps", {})
+    steps[key] = step
+    # Report the slowest video's stage so the UI progress never moves backwards
+    order = ["youtube_transcript", "instagram_transcript", "youtube_embeddings",
+             "instagram_embeddings", "storage"]
+    task["step"] = min(steps.values(), key=lambda s: order.index(s) if s in order else 0)
+
+
+def _embed_and_upsert(chunks: dict, video_id: str, label: str):
+    """Embed all chunk levels in one batch, then upsert each level to Pinecone."""
+    levels = ['fine', 'medium', 'coarse']
+    all_chunks = [c for level in levels for c in chunks[level]]
+    print(f"{label}: Embedding {len(all_chunks)} chunks in one batch...")
+    bge_embedder.embed_chunks(all_chunks)
+    for level in levels:
+        if chunks[level]:
+            pinecone_client.upsert_chunks(chunks[level], video_id)
+
+
+def _ingest_youtube(task: dict, youtube_url: str, video_id_a: str) -> dict:
     try:
-        task["step"] = "youtube_transcript"
+        _set_step(task, "A", "youtube_transcript")
         print("\n========== YOUTUBE ==========")
         print(f"URL: {youtube_url}")
-        
-        youtube_extractor = VideoExtractor(youtube_api_key=config.YOUTUBE_DATA_API_KEY)
-        youtube_metadata = youtube_extractor.extract_metadata(youtube_url, "youtube")
-        youtube_metadata = youtube_extractor.enrich_with_api_follower_count(youtube_metadata)
+
+        def fetch_metadata():
+            extractor = VideoExtractor(youtube_api_key=config.YOUTUBE_DATA_API_KEY)
+            metadata = extractor.extract_metadata(youtube_url, "youtube")
+            return extractor.enrich_with_api_follower_count(metadata)
+
+        # Metadata and transcript are independent, so fetch them concurrently
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            meta_future = pool.submit(fetch_metadata)
+            transcript_future = pool.submit(TranscriptFetcher().fetch_youtube_transcript, youtube_url)
+            youtube_metadata = meta_future.result()
+            youtube_segments = transcript_future.result()
+
         youtube_metadata['video_id'] = video_id_a
-        
-        transcript_fetcher = TranscriptFetcher()
-        youtube_segments = transcript_fetcher.fetch_youtube_transcript(youtube_url)
         duration = youtube_metadata['duration_seconds']
-        
         print(f"YOUTUBE: {len(youtube_segments)} segments, duration={duration}s")
-        
-        # Use manual chunks
-        task["step"] = "youtube_embeddings"
+
+        _set_step(task, "A", "youtube_embeddings")
         chunks = create_manual_chunks(youtube_segments, duration, video_id_a)
-        
-        for level in ['fine', 'medium', 'coarse']:
-            level_chunks = chunks[level]
-            if level_chunks:
-                print(f"YOUTUBE: Embedding {len(level_chunks)} {level} chunks...")
-                for chunk in level_chunks:
-                    chunk['embedding'] = bge_embedder.embed_text(chunk['text'])
-                pinecone_client.upsert_chunks(level_chunks, video_id_a)
-        
+        _embed_and_upsert(chunks, video_id_a, "YOUTUBE")
+
         store_video_metadata(video_id_a, youtube_metadata)
-        
-        results["A"] = {
+        return {
             'status': 'success',
             'metadata': youtube_metadata,
             'chunk_counts': {k: len(v) for k, v in chunks.items()}
         }
-        
     except Exception as e:
         print(f"YouTube error: {e}")
-        results["A"] = {
-            'status': 'error',
-            'error': str(e)
-        }
-    
-    # ── Process Instagram (Video B) ──
+        return {'status': 'error', 'error': str(e)}
+
+
+def _ingest_instagram(task: dict, instagram_url: str, video_id_b: str) -> dict:
     try:
-        task["step"] = "instagram_transcript"
+        _set_step(task, "B", "instagram_transcript")
         print("\n========== INSTAGRAM ==========")
         print(f"URL: {instagram_url}")
-        
+
         transcript_fetcher = TranscriptFetcher()
-        
-        # Step 1: Always try Playwright first for engagement data
-        playwright_data = None
-        try:
-            from ..ingestion.instagram_playwright import InstagramPlaywrightExtractor
-            pw = InstagramPlaywrightExtractor()
-            playwright_data = pw.extract(instagram_url)
-            print(f"Playwright data: creator={playwright_data.get('creator')}, "
-                  f"likes={playwright_data.get('likes')}, comments={playwright_data.get('comments')}")
-        except Exception as pw_error:
-            print(f"Playwright extraction failed: {pw_error}")
-        
-        # Step 2: Try yt-dlp for full metadata (may fail due to auth)
-        instagram_metadata = None
-        try:
-            instagram_extractor = InstagramExtractor()
-            instagram_metadata = instagram_extractor.extract_metadata(instagram_url, "instagram")
-            print("yt-dlp extraction succeeded")
-        except Exception as ytdlp_error:
-            print(f"yt-dlp Instagram failed (auth issue): {ytdlp_error}")
-        
+
+        def run_playwright():
+            try:
+                from ..ingestion.instagram_playwright import InstagramPlaywrightExtractor
+                data = InstagramPlaywrightExtractor().extract(instagram_url)
+                print(f"Playwright data: creator={data.get('creator')}, "
+                      f"likes={data.get('likes')}, comments={data.get('comments')}")
+                return data
+            except Exception as pw_error:
+                print(f"Playwright extraction failed: {pw_error}")
+                return None
+
+        def run_ytdlp():
+            try:
+                metadata = InstagramExtractor().extract_metadata(instagram_url, "instagram")
+                print("yt-dlp extraction succeeded")
+                return metadata
+            except Exception as ytdlp_error:
+                print(f"yt-dlp Instagram failed (auth issue): {ytdlp_error}")
+                return None
+
+        # Playwright, yt-dlp and the Whisper transcript are independent: run them together
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            pw_future = pool.submit(run_playwright)
+            ytdlp_future = pool.submit(run_ytdlp)
+            transcript_future = pool.submit(transcript_fetcher.fetch_instagram_transcript, instagram_url)
+            playwright_data = pw_future.result()
+            instagram_metadata = ytdlp_future.result()
+            instagram_segments = transcript_future.result()
+
         # Step 3: Build final metadata from best available source
         if instagram_metadata:
             # yt-dlp worked — enrich with Playwright data where yt-dlp is missing
@@ -360,49 +377,44 @@ def _run_ingestion(task_id: str, youtube_url: str, instagram_url: str,
             print(f"Final views: {estimated_views:,}, engagement: {instagram_metadata['engagement_rate']:.1f}%")
         
         instagram_metadata["video_id"] = video_id_b
-        
-        # Get transcript
-        instagram_segments = transcript_fetcher.fetch_instagram_transcript(instagram_url)
         duration = instagram_metadata.get("duration_seconds", 0)
-        
+
         if duration == 0 and instagram_segments:
             last_seg = instagram_segments[-1]
             duration = last_seg.get('end', last_seg.get('start', 0)) + 2
-        
+
         print(f"INSTAGRAM: {len(instagram_segments)} segments, duration={duration}s")
-        
-        # Use manual chunks
-        task["step"] = "instagram_embeddings"
+
+        _set_step(task, "B", "instagram_embeddings")
         chunks = create_manual_chunks(instagram_segments, duration, video_id_b)
         print(f"INSTAGRAM CHUNKS: fine={len(chunks['fine'])}, medium={len(chunks['medium'])}, coarse={len(chunks['coarse'])}")
-        
-        for level in ['fine', 'medium', 'coarse']:
-            level_chunks = chunks[level]
-            if level_chunks:
-                print(f"INSTAGRAM: Embedding {len(level_chunks)} {level} chunks...")
-                for chunk in level_chunks:
-                    chunk['embedding'] = bge_embedder.embed_text(chunk['text'])
-                pinecone_client.upsert_chunks(level_chunks, video_id_b)
-        
-        task["step"] = "storage"
+        _embed_and_upsert(chunks, video_id_b, "INSTAGRAM")
+
+        _set_step(task, "B", "storage")
         store_video_metadata(video_id_b, instagram_metadata)
-        
-        results["B"] = {
+        return {
             'status': 'success',
             'metadata': instagram_metadata,
             'chunk_counts': {k: len(v) for k, v in chunks.items()}
         }
-        
     except Exception as e:
         print(f"Instagram error: {e}")
         import traceback
         traceback.print_exc()
-        results["B"] = {
-            'status': 'error',
-            'error': str(e)
-        }
-    
-    # Mark task as completed
+        return {'status': 'error', 'error': str(e)}
+
+
+def _run_ingestion(task_id: str, youtube_url: str, instagram_url: str,
+                   video_id_a: str, video_id_b: str):
+    """Background worker: ingests both videos concurrently."""
+    task = ingestion_tasks[task_id]
+    task["steps"] = {}
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a_future = pool.submit(_ingest_youtube, task, youtube_url, video_id_a)
+        b_future = pool.submit(_ingest_instagram, task, instagram_url, video_id_b)
+        results = {"A": a_future.result(), "B": b_future.result()}
+
     task["status"] = "completed"
     task["step"] = "done"
     task["results"] = results

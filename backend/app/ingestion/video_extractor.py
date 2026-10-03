@@ -1,4 +1,5 @@
 import yt_dlp
+from .ytdlp_opts import build_ydl_opts
 import re
 import os
 from typing import Dict, Any, Optional
@@ -7,15 +8,8 @@ class VideoExtractor:
     """Extract metadata from YouTube and Instagram Reels using yt-dlp"""
 
     def __init__(self, youtube_api_key: str = None):
-    self.ydl_opts = {
-        'quiet': True,
-        'no_warnings': True,
-        'extract_flat': False,
-        'cookiefile': '/app/youtube_cookies.txt',  # Hardcoded absolute path
-        'js_runtimes': {'deno': {'path': '/root/.deno/bin/deno'}},
-        'remote_components': ['ejs:github'],
-    }
-    self.youtube_api_key = youtube_api_key
+        self.ydl_opts = build_ydl_opts({'extract_flat': False})
+        self.youtube_api_key = youtube_api_key
 
     def extract_metadata(self, url: str, platform: str) -> Dict[str, Any]:
         """Extract all metadata from video URL"""
@@ -146,18 +140,9 @@ class VideoExtractor:
 class InstagramExtractor(VideoExtractor):
     """Specialized extractor for Instagram Reels with follower count from profile"""
 
-   class InstagramExtractor(VideoExtractor):
-    """Specialized extractor for Instagram Reels with follower count from profile"""
 
     def extract_metadata(self, url: str, platform: str = "instagram") -> Dict[str, Any]:
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': False,
-            'cookiefile': '/app/youtube_cookies.txt',  # Hardcoded absolute path
-            'js_runtimes': {'deno': {'path': '/root/.deno/bin/deno'}},
-            'remote_components': ['ejs:github'],
-        }
+        ydl_opts = build_ydl_opts({'extract_flat': False})
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
